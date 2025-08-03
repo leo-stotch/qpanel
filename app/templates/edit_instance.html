@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Instance - qPanel{% endblock %}
+
+{% block content %}
+    <h2 class="mb-4">Edit Instance: {{ instance.name }}</h2>
+    <hr class="my-4">
+    <form method="post" action="{{ url_for('edit_instance', instance_id=instance.id) }}">
+        <div class="row">
+            <!-- Connection Details -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h4>Connection Details</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group mb-3">
+                            <label for="name" class="form-label">Instance Name</label>
+                            <input type="text" class="form-control" id="name" name="name" value="{{ instance.name }}" required>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="host" class="form-label">Host</label>
+                            <input type="text" class="form-control" id="host" name="host" value="{{ instance.host }}" required>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" value="{{ instance.username or '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" placeholder="Leave blank to keep current password">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Path Mappings -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h4>Path Mappings</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="tag_nohardlinks" name="tag_nohardlinks" value="true" {% if instance.tag_nohardlinks %}checked{% endif %}>
+                            <label class="form-check-label" for="tag_nohardlinks">Tag torrents that don't have hard links</label>
+                            <small class="form-text text-muted d-block">If enabled, adds the 'noHL' tag to torrents whose files exist only in the qBittorrent download directory. In order for this to work, you need to set the mappings below.</small>
+                        </div>
+                        <hr class="my-3">
+                        <div class="form-group mb-3">
+                            <label for="qbt_download_dir" class="form-label">qBittorrent Download Directory</label>
+                            <input type="text" class="form-control" id="qbt_download_dir" name="qbt_download_dir" value="{{ instance.qbt_download_dir or '' }}" placeholder="e.g., /downloads">
+                            <small class="form-text text-muted">The absolute path where qBittorrent saves its downloads.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="mapped_download_dir" class="form-label">Mapped Download Directory</label>
+                            <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" value="{{ instance.mapped_download_dir or '' }}" placeholder="e.g., /data/torrents">
+                            <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Automation Settings -->
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Automation Settings</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="look_for_deleted_torrents" name="look_for_deleted_torrents" value="true" {% if instance.look_for_deleted_torrents %}checked{% endif %}>
+                            <label class="form-check-label" for="look_for_deleted_torrents">Look for deleted torrents in logs</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will scan qBittorrent logs for entries about deleted torrents and record them in the recent activity.</small>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="pause_cross_seeded_torrents" name="pause_cross_seeded_torrents" value="true" {% if instance.pause_cross_seeded_torrents %}checked{% endif %}>
+                            <label class="form-check-label" for="pause_cross_seeded_torrents">Pause Cross-Seeded Torrents</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will pause torrents that have the same name as a torrent that is already paused.</small>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="tag_unregistered_torrents" name="tag_unregistered_torrents" value="true" {% if instance.tag_unregistered_torrents %}checked{% endif %}>
+                            <label class="form-check-label" for="tag_unregistered_torrents">Tag Unregistered Torrents</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will tag torrents with "unregistered" if their tracker status indicates they are no longer registered.</small>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="monitor_paused_up" name="monitor_paused_up" value="on" {% if instance.monitor_paused_up %}checked{% endif %}>
+                            <label class="form-check-label" for="monitor_paused_up">Monitor for pausedUP torrents</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ url_for('instances') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tagNoHardlinksCheckbox = document.getElementById('tag_nohardlinks');
+        const qbtDownloadDirInput = document.getElementById('qbt_download_dir');
+        const mappedDownloadDirInput = document.getElementById('mapped_download_dir');
+
+        function toggleRequired() {
+            if (tagNoHardlinksCheckbox.checked) {
+                qbtDownloadDirInput.setAttribute('required', 'required');
+                mappedDownloadDirInput.setAttribute('required', 'required');
+            } else {
+                qbtDownloadDirInput.removeAttribute('required');
+                mappedDownloadDirInput.removeAttribute('required');
+            }
+        }
+
+        tagNoHardlinksCheckbox.addEventListener('change', toggleRequired);
+        toggleRequired(); // Run on page load
+    });
+</script>
+{% endblock %} 

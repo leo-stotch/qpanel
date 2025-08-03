@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}qPanel{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body {
+            display: flex;
+            min-height: 100vh;
+            flex-direction: row;
+        }
+        .sidebar {
+            width: 280px;
+            min-height: 100vh;
+            padding: 1.5rem;
+            background-color: #212529;
+        }
+        .content {
+            flex-grow: 1;
+            padding: 2rem;
+        }
+        hr {
+            border: 0;
+            border-top: 1px dotted #495057;
+        }
+        .nav-link {
+            color: #adb5bd;
+        }
+        .nav-link.active, .nav-link:hover {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h3 class="mb-4">qPanel</h3>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
+                    <i class="bi bi-house-door-fill me-2"></i> Home
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'instances' %}active{% endif %}" href="{{ url_for('instances') }}">
+                    <i class="bi bi-server me-2"></i> Instances
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'rules' %}active{% endif %}" href="{{ url_for('rules') }}">
+                    <i class="bi bi-diagram-3-fill me-2"></i> Rules
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
+                    <i class="bi bi-gear-fill me-2"></i> Settings
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="content">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 

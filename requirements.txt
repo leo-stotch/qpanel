@@ -1,0 +1,5 @@
+Flask
+Flask-SQLAlchemy
+qbittorrent-api
+APScheduler
+httpx 

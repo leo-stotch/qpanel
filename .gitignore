@@ -1,0 +1,8 @@
+*.pyc
+__pycache__/
+.venv/
+instance/
+cache.json
+data/
+qpanel.db
+settings.json

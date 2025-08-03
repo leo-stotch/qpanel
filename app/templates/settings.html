@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - qPanel{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <h2 class="mb-4">Application Settings</h2>
+    
+    <form method="post" action="{{ url_for('settings') }}">
+        <div class="row">
+            <!-- General Settings -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h4>General Settings</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group mb-3">
+                            <label for="scheduler_interval_minutes" class="form-label">Rule Polling Interval (minutes)</label>
+                            <input type="number" class="form-control" id="scheduler_interval_minutes" name="scheduler_interval_minutes" value="{{ settings.scheduler_interval_minutes }}" min="1" required>
+                            <small class="form-text text-muted">How often to check and apply rules. Restart required.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="cache_duration_minutes" class="form-label">Cache TTL (minutes)</label>
+                            <input type="number" class="form-control" id="cache_duration_minutes" name="cache_duration_minutes" value="{{ settings.cache_duration_minutes }}" min="1" required>
+                            <small class="form-text text-muted">How long to cache the list of trackers and tags.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telegram Notifications -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h4>Telegram Notifications</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="telegram_notification_enabled" name="telegram_notification_enabled" {% if settings.telegram_notification_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="telegram_notification_enabled">Enable Telegram Notifications</label>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="telegram_bot_token" class="form-label">Telegram Bot Token</label>
+                            <input type="password" class="form-control" id="telegram_bot_token" name="telegram_bot_token" value="{{ settings.telegram_bot_token }}" placeholder="Token is hidden for security">
+                        </div>
+                        <div class="form-group">
+                            <label for="telegram_chat_id" class="form-label">Telegram Chat ID</label>
+                            <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" value="{{ settings.telegram_chat_id }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-0">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+    </form>
+
+    <hr class="my-3">
+
+    <div class="card border-danger">
+        <div class="card-header bg-danger text-white">
+            <h3>Danger Zone</h3>
+        </div>
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h5>Restart Application</h5>
+                    <p class="mb-0 text-muted">This will restart the entire application.</p>
+                </div>
+                <form method="post" action="{{ url_for('restart') }}" onsubmit="return confirm('Are you sure you want to restart the application?');" class="d-inline">
+                    <button type="submit" class="btn btn-warning">Restart</button>
+                </form>    
+            </div>
+            <hr class="my-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5>Remove Database</h5>
+                    <p class="mb-0 text-muted">This will permanently delete all your instances, rules, and logs.</p>
+                </div>
+                <form method="post" action="{{ url_for('remove_db') }}" onsubmit="return confirm('Are you sure you want to completely remove the database? This action is irreversible.');" class="d-inline">
+                    <button type="submit" class="btn btn-danger">Delete Database</button>
+                </form>    
+            </div>
+        </div>
+    </div>
+{% endblock %} 

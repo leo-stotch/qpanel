@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Instances - qPanel{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <h2 class="mb-4">Add New Instance</h2>
+    <form method="post" action="{{ url_for('instances') }}" class="mb-3">
+        <div class="row">
+            <!-- Connection Details -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h4>Connection Details</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group mb-3">
+                            <label for="name" class="form-label">Instance Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="host" class="form-label">Host</label>
+                            <input type="text" class="form-control" id="host" name="host" required placeholder="e.g., http://192.168.1.10:8080">
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username">
+                        </div>
+                        <div class="form-group">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hard Links Detection -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h4>Hard Links Detection</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="tag_nohardlinks" name="tag_nohardlinks" value="true">
+                            <label class="form-check-label" for="tag_nohardlinks">Tag torrents that don't have hard links</label>
+                            <small class="form-text text-muted d-block">If enabled, adds the 'noHL' tag to torrents which files exist only in the qBittorrent download directory. In order for this to work, you need to set the mappings below.</small>
+                        </div>
+                        <hr>
+                        <div class="form-group mb-3">
+                            <label for="qbt_download_dir" class="form-label">qBittorrent Download Directory</label>
+                            <input type="text" class="form-control" id="qbt_download_dir" name="qbt_download_dir" placeholder="e.g., /downloads">
+                            <small class="form-text text-muted">The absolute path where qBittorrent saves its downloads.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="mapped_download_dir" class="form-label">Mapped Download Directory</label>
+                            <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" placeholder="e.g., /data/torrents">
+                            <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Automation Settings -->
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Automation Settings</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="look_for_deleted_torrents" name="look_for_deleted_torrents" value="true">
+                            <label class="form-check-label" for="look_for_deleted_torrents">Look for deleted torrents in logs</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will scan qBittorrent logs for entries about deleted torrents and record them in the recent activity.</small>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="pause_cross_seeded_torrents" name="pause_cross_seeded_torrents" value="true">
+                            <label class="form-check-label" for="pause_cross_seeded_torrents">Pause Cross-Seeded Torrents</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will pause torrents that have the same name as a torrent that is already paused.</small>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="tag_unregistered_torrents" name="tag_unregistered_torrents" value="true">
+                            <label class="form-check-label" for="tag_unregistered_torrents">Tag Unregistered Torrents</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will tag torrents with "unregistered" if their tracker status indicates they are no longer registered.</small>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="monitor_paused_up" name="monitor_paused_up" value="on">
+                            <label class="form-check-label" for="monitor_paused_up">Monitor for pausedUP torrents</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will monitor for torrents in pausedUP state and send a notification if any are found.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-0">
+            <button type="submit" class="btn btn-primary">Add Instance</button>
+        </div>
+    </form>
+
+    <hr class="my-3">
+
+    <h2 class="mb-4">Existing Instances</h2>
+    {% if configs %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 20%;">Name</th>
+                        <th style="width: 15%;">Status</th>
+                        <th>Host</th>
+                        <th style="width: 15%;">Rules</th>
+                        <th style="width: 15%;" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for config in configs %}
+                    <tr>
+                        <td>{{ config.name }}</td>
+                        <td>
+                            {% set status = instance_statuses[config.id] %}
+                            {% if status.status == 'Online' %}
+                                <span class="badge bg-success">Online</span>
+                                <span class="badge bg-info fw-normal">{{ status.version }}</span>
+                            {% else %}
+                                <span class="badge bg-danger">Offline</span>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ config.host }}</code></td>
+                        <td>
+                            {% if config.rules %}
+                                <span class="badge bg-primary fw-normal">{{ config.rules|length }} assigned</span>
+                            {% else %}
+                                <span class="badge bg-secondary fw-normal">None</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ url_for('edit_instance', instance_id=config.id) }}" class="btn btn-primary btn-sm">Edit</a>
+                            <form action="{{ url_for('delete_instance', instance_id=config.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this instance?');">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+        <p>No instances have been added yet.</p>
+    {% endif %}
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tagNoHardlinksCheckbox = document.getElementById('tag_nohardlinks');
+        const qbtDownloadDirInput = document.getElementById('qbt_download_dir');
+        const mappedDownloadDirInput = document.getElementById('mapped_download_dir');
+
+        function toggleRequired() {
+            if (tagNoHardlinksCheckbox.checked) {
+                qbtDownloadDirInput.setAttribute('required', 'required');
+                mappedDownloadDirInput.setAttribute('required', 'required');
+            } else {
+                qbtDownloadDirInput.removeAttribute('required');
+                mappedDownloadDirInput.removeAttribute('required');
+            }
+        }
+
+        tagNoHardlinksCheckbox.addEventListener('change', toggleRequired);
+        toggleRequired(); // Run on page load
+    });
+</script>
+{% endblock %} 

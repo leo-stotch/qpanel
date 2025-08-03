@@ -1,0 +1,11 @@
+services:
+  qpanel:
+    # build: .
+    image: ghcr.io/leo-stotch/qpanel:sha-60a4cb9
+    container_name: qpanel
+    ports:
+      - "${FLASK_PORT:-5001}:5001"
+    volumes:
+      - ./data:/app/data
+      # - /media/downloads/:/downloads:rw
+    restart: unless-stopped

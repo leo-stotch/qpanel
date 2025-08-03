@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Home - qPanel{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <h2 class="mb-4">Dashboard</h2>
+
+    <h4 class="mb-3">Instances</h4>
+    {% if instances %}
+        <div class="card mb-4">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 20%;">Name</th>
+                            <th style="width: 15%;">Status</th>
+                            <th>Host</th>
+                            <th style="width: 15%;">Rules</th>
+                            <th style="width: 15%;" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for instance in instances %}
+                        <tr class="instance-row">
+                            <td>{{ instance.name }}</td>
+                            <td>
+                                {% set status = instance_statuses[instance.id] %}
+                                {% if status.status == 'Online' %}
+                                    <span class="badge bg-success">Online</span>
+                                    <span class="badge bg-info fw-normal">{{ status.version }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Offline</span>
+                                {% endif %}
+                            </td>
+                            <td><code>{{ instance.host }}</code></td>
+                            <td>
+                                {% if instance.rules %}
+                                    <span class="badge bg-primary fw-normal">{{ instance.rules|length }} assigned</span>
+                                {% else %}
+                                    <span class="badge bg-secondary fw-normal">None</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-info" data-bs-toggle="collapse" data-bs-target="#rules-collapse-{{ instance.id }}">
+                                    Rules
+                                </button>
+                                <a href="{{ url_for('edit_instance', instance_id=instance.id) }}" class="btn btn-sm btn-primary">Edit</a>
+                            </td>
+                        </tr>
+                        <tr class="collapse" id="rules-collapse-{{ instance.id }}">
+                            <td colspan="5">
+                                <div class="p-3">
+                                    {% if instance.rules %}
+                                        <ul class="list-group list-group-flush mb-3">
+                                            {% for rule in instance.rules %}
+                                            <li class="list-group-item d-flex justify-content-between align-items-center ps-0">
+                                                {{ rule.name }}
+                                                <form method="post" action="{{ url_for('remove_rule_from_instance', instance_id=instance.id, rule_id=rule.id) }}">
+                                                    <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                                                </form>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% else %}
+                                        <p>No rules assigned yet.</p>
+                                    {% endif %}
+                                    
+                                    <h6>Assign New Rule</h6>
+                                    <form method="post" action="{{ url_for('assign_rule', instance_id=instance.id) }}">
+                                        <div class="input-group">
+                                            <select class="form-select" name="rule_id" required>
+                                                <option selected disabled value="">Choose a rule...</option>
+                                                {% set assigned_rule_ids = instance.rules|map(attribute='id')|list %}
+                                                {% for rule in rules if rule.id not in assigned_rule_ids %}
+                                                <option value="{{ rule.id }}">{{ rule.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="btn btn-primary">Assign</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="card mb-4">
+            <div class="card-body">
+                <p class="card-text">No instances configured. <a href="{{ url_for('instances') }}">Add one here</a>.</p>
+            </div>
+        </div>
+    {% endif %}
+
+    <hr class="my-3">
+
+    <h4 class="mb-3">Recent Activity</h4>
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Logs</h5>
+            <form method="post" action="{{ url_for('clear_logs') }}" onsubmit="return confirm('Are you sure you want to clear all logs?');" style="display: inline;">
+                <button type="submit" class="btn btn-danger btn-sm">Clear</button>
+            </form>
+        </div>
+        <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+            {% if logs %}
+                <ul class="list-group list-group-flush">
+                    {% for log in logs %}
+                        <li class="list-group-item">
+                            <span class="text-muted small">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</span><br>
+                            <strong>{{ log.instance.name }}</strong>: {{ log.action }}
+                            {% if log.details %}- <small class="text-muted">{{ log.details }}</small>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No recent activity.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %} 

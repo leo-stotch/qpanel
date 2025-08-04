@@ -1,7 +1,7 @@
 services:
   qpanel:
     # build: .
-    image: ghcr.io/leo-stotch/qpanel:sha-60a4cb9
+    image: ghcr.io/leo-stotch/qpanel:sha-a3a35e3
     container_name: qpanel
     ports:
       - "${FLASK_PORT:-5001}:5001"

@@ -1,6 +1,13 @@
 # qPanel
 
-qPanel is a web-based management tool for qBittorrent, designed to automate torrent management tasks such as applying seeding rules, finding torrents without hard links, handling cross-seeded torrents and etc.
+qPanel is a web-based management tool for qBittorrent, designed to automate torrent management tasks such as:
+
+- applying seeding rules (i.e. `if a torrent has tag noHL, set seeding time to 43200 minutes`);
+- finding torrents without hard links;
+- pausing cross-seeded torrents;
+- finding unregistered torrents;
+- finding pausedUP torrents;
+- finding events about deleted torrents in qBittorrent API logs.
 
 ![demo](qpanel_demo.gif "qPanel demo")
 

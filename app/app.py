@@ -20,7 +20,10 @@ DEFAULT_SETTINGS = {
     'cache_duration_minutes': 10,
     'telegram_bot_token': '',
     'telegram_chat_id': '',
-    'telegram_notification_enabled': False
+    'telegram_notification_enabled': False,
+    'orphaned_scan_enabled': False,
+    'orphaned_min_age_days': 7,
+    'orphaned_ignore_patterns': []
 }
 
 def load_settings():
@@ -177,12 +180,18 @@ def clear_telegram_messages():
 def settings():
     if request.method == 'POST':
         current_settings = load_settings()
+        # Parse ignore patterns from textarea (one regex per line)
+        raw_patterns = request.form.get('orphaned_ignore_patterns', '')
+        parsed_patterns = [p.strip() for p in raw_patterns.splitlines() if p.strip()]
         new_settings = {
             'scheduler_interval_minutes': int(request.form['scheduler_interval_minutes']),
             'cache_duration_minutes': int(request.form['cache_duration_minutes']),
             'telegram_bot_token': request.form['telegram_bot_token'] if request.form['telegram_bot_token'] else current_settings.get('telegram_bot_token', ''),
             'telegram_chat_id': request.form['telegram_chat_id'],
-            'telegram_notification_enabled': request.form.get('telegram_notification_enabled') == 'on'
+            'telegram_notification_enabled': request.form.get('telegram_notification_enabled') == 'on',
+            'orphaned_scan_enabled': request.form.get('orphaned_scan_enabled') == 'on',
+            'orphaned_min_age_days': int(request.form.get('orphaned_min_age_days') or 7),
+            'orphaned_ignore_patterns': parsed_patterns
         }
         save_settings(new_settings)
         flash('Settings saved successfully! Please restart the application for the new interval to take effect.', 'success')
@@ -440,7 +449,7 @@ if __name__ == '__main__':
         db.create_all()
     
     settings = load_settings()
-    from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, monitor_paused_up_torrents_job
+    from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, monitor_paused_up_torrents_job, detect_orphaned_files_job
     from log_parser import log_parsing_job
     from cross_seed_checker import pause_cross_seeded_torrents_job
     scheduler = BackgroundScheduler()
@@ -454,6 +463,7 @@ if __name__ == '__main__':
     scheduler.add_job(func=pause_cross_seeded_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=3))
     scheduler.add_job(func=log_parsing_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
     scheduler.add_job(func=monitor_paused_up_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=5))
+    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=6))
     
     scheduler.start()
 

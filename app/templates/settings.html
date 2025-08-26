@@ -32,6 +32,21 @@
                             <input type="number" class="form-control" id="cache_duration_minutes" name="cache_duration_minutes" value="{{ settings.cache_duration_minutes }}" min="1" required>
                             <small class="form-text text-muted">How long to cache the list of trackers and tags.</small>
                         </div>
+                        <hr>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="orphaned_scan_enabled" name="orphaned_scan_enabled" {% if settings.orphaned_scan_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="orphaned_scan_enabled">Enable Orphaned Files Scan</label>
+                        </div>
+                        <div class="form-group mb-1">
+                            <label for="orphaned_min_age_days" class="form-label">Orphaned Min Age (days)</label>
+                            <input type="number" class="form-control" id="orphaned_min_age_days" name="orphaned_min_age_days" value="{{ settings.orphaned_min_age_days or 7 }}" min="0">
+                            <small class="form-text text-muted">Only report files older than this many days.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="orphaned_ignore_patterns" class="form-label">Ignore Patterns (regex)</label>
+                            <textarea class="form-control" id="orphaned_ignore_patterns" name="orphaned_ignore_patterns" rows="4" placeholder="One regex per line">{% if settings.orphaned_ignore_patterns %}{{ '\n'.join(settings.orphaned_ignore_patterns) }}{% endif %}</textarea>
+                            <small class="form-text text-muted">Files matching any regex here will be ignored during orphan scan.</small>
+                        </div>
                     </div>
                 </div>
             </div>

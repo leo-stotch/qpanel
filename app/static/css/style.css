@@ -1,0 +1,62 @@
+/* SICC-inspired minimal dark theme with clear type and airy spacing */
+:root {
+  --brand-accent: #f6c453;
+  --bg-body: #0f1115;
+  --bg-surface: #151923;
+  --text-primary: #e9ecef;
+  --text-secondary: #a7b0be;
+  --border-color: #2a2f3a;
+}
+
+html, body {
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+}
+
+/* Bootstrap overrides */
+[data-bs-theme="dark"] .bg-body-tertiary, .bg-body-tertiary {
+  background-color: rgba(21, 25, 35, 0.8) !important;
+  backdrop-filter: blur(8px);
+}
+
+.navbar-brand { letter-spacing: 0.3px; }
+.navbar .nav-link { color: var(--text-secondary); }
+.navbar .nav-link.active, .navbar .nav-link:hover { color: var(--text-primary); }
+
+main h1, main h2, main h3, main h4, .card-header h4, .card-header h3 {
+  letter-spacing: 0.2px;
+}
+
+.card {
+  background-color: var(--bg-surface);
+  border-color: var(--border-color);
+}
+
+.table { color: var(--text-primary); }
+.table thead th { color: var(--text-secondary); border-color: var(--border-color); }
+.table td, .table th { border-color: var(--border-color); }
+
+hr { border-top: 1px dotted var(--border-color) !important; opacity: 1; }
+
+/* Desktop sidebar links */
+aside .nav-link { color: var(--text-secondary); }
+aside .nav-link.active, aside .nav-link:hover { color: var(--text-primary); }
+
+/* Offcanvas */
+.offcanvas { background-color: var(--bg-surface); color: var(--text-primary); }
+
+/* Utilities */
+code { color: #c6d0f5; }
+.badge.bg-primary { background-color: #2b8aef !important; }
+.badge.bg-secondary { background-color: #596275 !important; }
+.badge.bg-success { background-color: #2fbf71 !important; }
+.badge.bg-danger { background-color: #e55353 !important; }
+.badge.bg-info { background-color: #6aa4ff !important; }
+
+/* Improve spacing on mobile */
+@media (max-width: 767.98px) {
+  .card { border-radius: 10px; }
+  .table-responsive { border-radius: 8px; }
+}
+
+

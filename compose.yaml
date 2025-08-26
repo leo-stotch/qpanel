@@ -6,6 +6,9 @@ services:
     ports:
       - "${FLASK_PORT:-5001}:5001"
     volumes:
-      - ./data:/app/data
+      - qpanel-data:/app/data
       # - /media/downloads/:/downloads:rw
     restart: unless-stopped
+
+volumes:
+  qpanel-data:

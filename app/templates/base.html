@@ -4,67 +4,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}qPanel{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <style>
-        body {
-            display: flex;
-            min-height: 100vh;
-            flex-direction: row;
-        }
-        .sidebar {
-            width: 280px;
-            min-height: 100vh;
-            padding: 1.5rem;
-            background-color: #212529;
-        }
-        .content {
-            flex-grow: 1;
-            padding: 2rem;
-        }
-        hr {
-            border: 0;
-            border-top: 1px dotted #495057;
-        }
-        .nav-link {
-            color: #adb5bd;
-        }
-        .nav-link.active, .nav-link:hover {
-            color: #fff;
-        }
-    </style>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="sidebar">
-        <h3 class="mb-4">qPanel</h3>
-        <ul class="nav flex-column">
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
-                    <i class="bi bi-house-door-fill me-2"></i> Home
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'instances' %}active{% endif %}" href="{{ url_for('instances') }}">
-                    <i class="bi bi-server me-2"></i> Instances
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'rules' %}active{% endif %}" href="{{ url_for('rules') }}">
-                    <i class="bi bi-diagram-3-fill me-2"></i> Rules
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
-                    <i class="bi bi-gear-fill me-2"></i> Settings
-                </a>
-            </li>
-        </ul>
+    <nav class="navbar navbar-expand-md fixed-top border-bottom bg-body-tertiary">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-semibold" href="{{ url_for('index') }}">qPanel</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNav" aria-controls="offcanvasNav" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse d-none d-md-flex" id="navbarSupportedContent">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">Home</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'instances' %}active{% endif %}" href="{{ url_for('instances') }}">Instances</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'rules' %}active{% endif %}" href="{{ url_for('rules') }}">Rules</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">Settings</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasNav" aria-labelledby="offcanvasNavLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="offcanvasNavLabel">qPanel</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="bi bi-house-door me-2"></i>Home</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint == 'instances' %}active{% endif %}" href="{{ url_for('instances') }}"><i class="bi bi-server me-2"></i>Instances</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint == 'rules' %}active{% endif %}" href="{{ url_for('rules') }}"><i class="bi bi-diagram-3 me-2"></i>Rules</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            </ul>
+        </div>
     </div>
 
-    <div class="content">
-        {% block content %}{% endblock %}
+    <div class="container-fluid">
+        <div class="row">
+            <aside class="col-md-3 col-lg-2 d-none d-md-block border-end px-3 py-4 position-sticky" style="top:56px; min-height:calc(100vh - 56px);">
+                <ul class="nav flex-column small">
+                    <li class="nav-item mb-1"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="bi bi-house-door me-2"></i>Home</a></li>
+                    <li class="nav-item mb-1"><a class="nav-link {% if request.endpoint == 'instances' %}active{% endif %}" href="{{ url_for('instances') }}"><i class="bi bi-server me-2"></i>Instances</a></li>
+                    <li class="nav-item mb-1"><a class="nav-link {% if request.endpoint == 'rules' %}active{% endif %}" href="{{ url_for('rules') }}"><i class="bi bi-diagram-3 me-2"></i>Rules</a></li>
+                    <li class="nav-item mb-1"><a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}"><i class="bi bi-gear me-2"></i>Settings</a></li>
+                </ul>
+            </aside>
+            <main class="col-12 col-md-9 col-lg-10 ms-auto px-3 px-md-4 py-4" style="margin-top:56px;">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html> 

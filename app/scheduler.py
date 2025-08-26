@@ -8,6 +8,8 @@ import os
 from cross_seed_checker import send_telegram_message
 from app import TelegramMessage
 from datetime import datetime, timedelta
+from typing import Optional, Set, List, Tuple
+import re
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -286,4 +288,175 @@ def monitor_paused_up_torrents_job():
 
             except Exception as e:
                 logging.error(f"An unexpected error occurred in monitor_paused_up_torrents_job for instance '{instance.name}': {e}")
+                db.session.rollback()
+
+def _map_qbt_path_to_local(instance: Instance, qbt_path: str) -> Optional[str]:
+    """Translate a qBittorrent-visible path to the local filesystem path using the instance mapping.
+
+    Returns None if mapping is not configured or the path does not fall under the mapped root.
+    """
+    if not instance.qbt_download_dir or not instance.mapped_download_dir:
+        return None
+    try:
+        normalized_qbt_root = os.path.realpath(os.path.normpath(instance.qbt_download_dir))
+        normalized_local_root = os.path.realpath(os.path.normpath(instance.mapped_download_dir))
+        normalized_qbt_path = os.path.realpath(os.path.normpath(qbt_path))
+
+        if os.path.commonpath([normalized_qbt_path, normalized_qbt_root]) == normalized_qbt_root:
+            rel = os.path.relpath(normalized_qbt_path, normalized_qbt_root)
+            return os.path.realpath(os.path.normpath(os.path.join(normalized_local_root, rel)))
+        return None
+    except Exception:
+        return None
+
+def _collect_expected_local_paths(instance: Instance, client, group_mapped_root: Optional[str] = None) -> Set[str]:
+    """Build a set of expected file paths on the local filesystem for the given instance.
+
+    If mapping fails, but the qBittorrent-visible path is already under the group's mapped root,
+    include it as-is (realpathed). This helps when multiple services share the exact same mount path.
+    """
+    expected: Set[str] = set()
+    torrents = client.torrents_info()
+    group_root_real = os.path.realpath(os.path.normpath(group_mapped_root)) if group_mapped_root else None
+    for torrent in torrents:
+        try:
+            files = client.torrents_files(torrent_hash=torrent.hash)
+            torrent_save_path = torrent.save_path
+            for f in files:
+                qbt_full_path = os.path.join(torrent_save_path, f.name)
+                local_path = _map_qbt_path_to_local(instance, qbt_full_path)
+                if local_path:
+                    expected.add(os.path.realpath(local_path))
+                    continue
+                # Fallback: if qbt path is already under the group mapped root, accept it
+                if group_root_real:
+                    qbt_real = os.path.realpath(os.path.normpath(qbt_full_path))
+                    try:
+                        if os.path.commonpath([qbt_real, group_root_real]) == group_root_real:
+                            expected.add(qbt_real)
+                    except Exception:
+                        pass
+        except Exception:
+            # Skip problematic torrents but continue overall
+            continue
+    return expected
+
+def _collect_inodes(paths: Set[str]) -> Set[Tuple[int, int]]:
+    """Return a set of (st_dev, st_ino) for the given file paths that exist."""
+    inodes: Set[Tuple[int, int]] = set()
+    for p in paths:
+        try:
+            st = os.stat(p)
+            inodes.add((st.st_dev, st.st_ino))
+        except (FileNotFoundError, PermissionError):
+            continue
+    return inodes
+
+def _find_orphaned_files(mapped_root: str, expected_paths: Set[str], expected_inodes: Set[Tuple[int, int]], min_age_days: int, ignore_patterns: Optional[List[str]] = None) -> List[str]:
+    """Walk the mapped root and find files not present in expected paths, older than threshold."""
+    orphans: List[str] = []
+    if not mapped_root or not os.path.isdir(mapped_root):
+        return orphans
+    now = datetime.now().timestamp()
+    min_age_seconds = max(0, min_age_days) * 24 * 3600
+    compiled: List[re.Pattern] = []
+    if ignore_patterns:
+        for p in ignore_patterns:
+            try:
+                compiled.append(re.compile(p))
+            except re.error:
+                # Skip invalid regex
+                continue
+    real_root = os.path.realpath(mapped_root)
+    for dirpath, dirnames, filenames in os.walk(real_root):
+        for filename in filenames:
+            full_path = os.path.realpath(os.path.normpath(os.path.join(dirpath, filename)))
+            # Apply ignore patterns, if any
+            if compiled and any(rx.search(full_path) for rx in compiled):
+                continue
+            if full_path in expected_paths:
+                continue
+            try:
+                stat = os.stat(full_path)
+                age = now - stat.st_mtime
+                # If the inode matches a known expected file, skip
+                if (stat.st_dev, stat.st_ino) in expected_inodes:
+                    continue
+                if age >= min_age_seconds:
+                    orphans.append(full_path)
+            except FileNotFoundError:
+                # File disappeared during scan; ignore
+                continue
+            except PermissionError:
+                # Ignore unreadable files
+                continue
+    return orphans
+
+def detect_orphaned_files_job():
+    """Scheduled job to detect orphaned files across all instances and notify instead of removing.
+
+    Collects expected files from ALL instances globally, then scans each unique mapped directory
+    to avoid false positives when files are managed by different instances.
+    """
+    settings = load_settings()
+    if not settings.get('orphaned_scan_enabled'):
+        return
+    min_age_days = int(settings.get('orphaned_min_age_days', 7))
+    ignore_patterns = settings.get('orphaned_ignore_patterns') or []
+
+    with app.app_context():
+        instances = [i for i in Instance.query.all() if i.qbt_download_dir and i.mapped_download_dir]
+        
+        # First, collect ALL expected files from ALL instances globally
+        global_expected_paths: Set[str] = set()
+        for inst in instances:
+            client = get_client(inst)
+            if not client:
+                continue
+            try:
+                global_expected_paths |= _collect_expected_local_paths(inst, client)
+            except Exception:
+                continue
+
+        if not global_expected_paths:
+            return
+
+        global_expected_inodes = _collect_inodes(global_expected_paths)
+
+        # Group instances by mapped root for scanning purposes
+        groups = {}
+        for inst in instances:
+            real_group_key = os.path.realpath(os.path.normpath(inst.mapped_download_dir))
+            groups.setdefault(real_group_key, []).append(inst)
+
+        for mapped_root, group_instances in groups.items():
+            try:
+                # Use global expected paths and inodes for orphan detection
+                orphaned = _find_orphaned_files(mapped_root, global_expected_paths, global_expected_inodes, min_age_days, ignore_patterns)
+                if orphaned:
+                    # Attribute logs to the first instance in the group
+                    owner = group_instances[0]
+                    for orphan in orphaned:
+                        db.session.add(ActionLog(
+                            instance_id=owner.id,
+                            action="Orphaned file detected",
+                            details=orphan
+                        ))
+
+                    if settings.get('telegram_notification_enabled'):
+                        max_list = 10
+                        listed = "\n".join(orphaned[:max_list])
+                        more_count = max(0, len(orphaned) - max_list)
+                        more_text = f"\n...and {more_count} more" if more_count else ""
+                        message = (
+                            f"Orphaned files detected in '{mapped_root}' (>= {min_age_days}d).\n"
+                            f"Owner instance: {owner.name}\n"
+                            f"{listed}{more_text}"
+                        )
+                        if send_telegram_message(settings.get('telegram_bot_token'), settings.get('telegram_chat_id'), message, parse_mode='HTML'):
+                            db.session.add(TelegramMessage(message=message))
+
+                    db.session.commit()
+            except Exception as e:
+                logging.error(f"An unexpected error occurred in detect_orphaned_files_job for mapped root '{mapped_root}': {e}")
                 db.session.rollback()

@@ -5,7 +5,7 @@ import time
 import json
 import os
 from urllib.parse import urlparse
-from qbt_client import get_client
+from qbt_client import get_client, get_all_torrents
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 
@@ -353,7 +353,7 @@ def get_rule_options():
                             if tag:
                                 all_tags.add(tag)
 
-                    torrents = client.torrents_info()
+                    torrents = get_all_torrents(client)
                     for torrent in torrents:
                         for tracker in torrent.trackers:
                             parsed_url = urlparse(tracker.url)

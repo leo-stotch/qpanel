@@ -1,5 +1,5 @@
 from app import app, db, Instance, ActionLog
-from qbt_client import get_client
+from qbt_client import get_client, get_all_torrents
 from flask import flash
 import logging
 import traceback
@@ -159,7 +159,8 @@ def tag_unregistered_torrents_for_instance(instance, client, torrents):
         "Torrent has been deleted",
         "Torrent not registered with this tracker",
         "Torrent is not authorized for use on this tracker",
-        "This torrent does not exist"
+        "This torrent does not exist",
+        "Torrent not found"
     ]
     
     for torrent in torrents:
@@ -207,7 +208,7 @@ def apply_rules_job():
         for instance in instances:
             try:
                 client = get_client(instance)
-                torrents = client.torrents_info()
+                torrents = get_all_torrents(client)
                 apply_rules_for_instance(instance, client, torrents)
                 db.session.commit()
             except Exception as e:
@@ -222,7 +223,7 @@ def tag_unregistered_torrents_job():
         for instance in instances:
             try:
                 client = get_client(instance)
-                torrents = client.torrents_info()
+                torrents = get_all_torrents(client)
                 tag_unregistered_torrents_for_instance(instance, client, torrents)
                 db.session.commit()
             except Exception as e:
@@ -237,7 +238,7 @@ def tag_torrents_with_no_hard_links_job():
         for instance in instances:
             try:
                 client = get_client(instance)
-                torrents = client.torrents_info()
+                torrents = get_all_torrents(client)
                 tag_torrents_with_no_hard_links(instance, client, torrents)
                 db.session.commit()
             except Exception as e:
@@ -252,7 +253,7 @@ def monitor_paused_up_torrents_job():
         for instance in instances:
             try:
                 client = get_client(instance)
-                all_torrents = client.torrents_info()
+                all_torrents = get_all_torrents(client)
                 paused_up_torrents = [t for t in all_torrents if t.state == 'pausedUP']
 
                 if paused_up_torrents:
@@ -316,29 +317,45 @@ def _collect_expected_local_paths(instance: Instance, client, group_mapped_root:
     include it as-is (realpathed). This helps when multiple services share the exact same mount path.
     """
     expected: Set[str] = set()
-    torrents = client.torrents_info()
+    torrents = get_all_torrents(client)
     group_root_real = os.path.realpath(os.path.normpath(group_mapped_root)) if group_mapped_root else None
+    logger.info(f"Collecting expected paths for instance '{instance.name}' (qbt_dir: {instance.qbt_download_dir}, mapped_dir: {instance.mapped_download_dir})")
+    logger.info(f"Retrieved {len(torrents)} torrents from instance '{instance.name}'")
+    
     for torrent in torrents:
         try:
             files = client.torrents_files(torrent_hash=torrent.hash)
             torrent_save_path = torrent.save_path
+            logger.info(f"Processing torrent '{torrent.name}' with save_path: {torrent_save_path}")
+            
             for f in files:
                 qbt_full_path = os.path.join(torrent_save_path, f.name)
                 local_path = _map_qbt_path_to_local(instance, qbt_full_path)
                 if local_path:
-                    expected.add(os.path.realpath(local_path))
+                    real_local = os.path.realpath(local_path)
+                    expected.add(real_local)
+                    logger.info(f"Mapped {qbt_full_path} -> {real_local}")
                     continue
+                    
                 # Fallback: if qbt path is already under the group mapped root, accept it
                 if group_root_real:
                     qbt_real = os.path.realpath(os.path.normpath(qbt_full_path))
                     try:
                         if os.path.commonpath([qbt_real, group_root_real]) == group_root_real:
                             expected.add(qbt_real)
+                            logger.info(f"Direct path accepted: {qbt_real}")
                     except Exception:
                         pass
-        except Exception:
-            # Skip problematic torrents but continue overall
+                else:
+                    # No group root, but maybe qbt path is directly usable
+                    qbt_real = os.path.realpath(os.path.normpath(qbt_full_path))
+                    expected.add(qbt_real)
+                    logger.info(f"Direct qbt path added: {qbt_real}")
+        except Exception as e:
+            logger.warning(f"Error processing torrent {torrent.name}: {e}")
             continue
+    
+    logger.info(f"Instance '{instance.name}' contributed {len(expected)} expected paths")
     return expected
 
 def _collect_inodes(paths: Set[str]) -> Set[Tuple[int, int]]:
@@ -412,16 +429,23 @@ def detect_orphaned_files_job():
         for inst in instances:
             client = get_client(inst)
             if not client:
+                logger.warning(f"Could not connect to instance '{inst.name}'")
                 continue
             try:
-                global_expected_paths |= _collect_expected_local_paths(inst, client)
-            except Exception:
+                inst_paths = _collect_expected_local_paths(inst, client)
+                global_expected_paths |= inst_paths
+                logger.info(f"Added {len(inst_paths)} paths from instance '{inst.name}'")
+            except Exception as e:
+                logger.error(f"Error collecting paths from instance '{inst.name}': {e}")
                 continue
 
+        logger.info(f"Total global expected paths: {len(global_expected_paths)}")
         if not global_expected_paths:
+            logger.warning("No expected paths found across all instances")
             return
 
         global_expected_inodes = _collect_inodes(global_expected_paths)
+        logger.info(f"Total global expected inodes: {len(global_expected_inodes)}")
 
         # Group instances by mapped root for scanning purposes
         groups = {}
@@ -431,9 +455,16 @@ def detect_orphaned_files_job():
 
         for mapped_root, group_instances in groups.items():
             try:
+                logger.info(f"Scanning mapped root '{mapped_root}' for orphans")
                 # Use global expected paths and inodes for orphan detection
                 orphaned = _find_orphaned_files(mapped_root, global_expected_paths, global_expected_inodes, min_age_days, ignore_patterns)
+                logger.info(f"Found {len(orphaned)} orphaned files in '{mapped_root}'")
+                
                 if orphaned:
+                    # Log some examples for debugging
+                    for i, orphan in enumerate(orphaned[:3]):
+                        logger.info(f"Orphan example {i+1}: {orphan}")
+                    
                     # Attribute logs to the first instance in the group
                     owner = group_instances[0]
                     for orphan in orphaned:

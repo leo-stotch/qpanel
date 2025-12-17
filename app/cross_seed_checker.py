@@ -34,6 +34,27 @@ def send_telegram_message(bot_token, chat_id, message, parse_mode=None):
         logger.error(f"Failed to send Telegram message: {e}")
         return False
 
+def send_discord_message(webhook_url, message):
+    """
+    Sends a message to a Discord channel via webhook.
+    """
+    if not webhook_url:
+        logger.warning("Discord webhook URL is not configured.")
+        return False
+    
+    payload = {
+        'content': message
+    }
+        
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        response.raise_for_status()
+        logger.info("Successfully sent Discord message.")
+        return True
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to send Discord message: {e}")
+        return False
+
 def pause_cross_seeded_torrents_for_instance(instance, client):
     """
     Checks for and pauses cross-seeded torrents on a single qBittorrent instance.

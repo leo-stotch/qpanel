@@ -53,16 +53,18 @@
                             <label class="form-check-label" for="tag_nohardlinks">Tag torrents that don't have hard links</label>
                             <small class="form-text text-muted d-block">If enabled, adds the 'noHL' tag to torrents which files exist only in the qBittorrent download directory. In order for this to work, you need to set the mappings below.</small>
                         </div>
-                        <hr>
-                        <div class="form-group mb-3">
-                            <label for="qbt_download_dir" class="form-label">qBittorrent Download Directory</label>
-                            <input type="text" class="form-control" id="qbt_download_dir" name="qbt_download_dir" placeholder="e.g., /downloads">
-                            <small class="form-text text-muted">The absolute path where qBittorrent saves its downloads.</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="mapped_download_dir" class="form-label">Mapped Download Directory</label>
-                            <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" placeholder="e.g., /data/torrents">
-                            <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
+                        <div id="hardlinks_fields" style="display: none;">
+                            <hr>
+                            <div class="form-group mb-3">
+                                <label for="qbt_download_dir" class="form-label">qBittorrent Download Directory</label>
+                                <input type="text" class="form-control" id="qbt_download_dir" name="qbt_download_dir" placeholder="e.g., /downloads">
+                                <small class="form-text text-muted">The absolute path where qBittorrent saves its downloads.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="mapped_download_dir" class="form-label">Mapped Download Directory</label>
+                                <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" placeholder="e.g., /data/torrents">
+                                <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -164,21 +166,24 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const tagNoHardlinksCheckbox = document.getElementById('tag_nohardlinks');
+        const hardlinksFields = document.getElementById('hardlinks_fields');
         const qbtDownloadDirInput = document.getElementById('qbt_download_dir');
         const mappedDownloadDirInput = document.getElementById('mapped_download_dir');
 
-        function toggleRequired() {
+        function toggleHardlinksFields() {
             if (tagNoHardlinksCheckbox.checked) {
+                hardlinksFields.style.display = 'block';
                 qbtDownloadDirInput.setAttribute('required', 'required');
                 mappedDownloadDirInput.setAttribute('required', 'required');
             } else {
+                hardlinksFields.style.display = 'none';
                 qbtDownloadDirInput.removeAttribute('required');
                 mappedDownloadDirInput.removeAttribute('required');
             }
         }
 
-        tagNoHardlinksCheckbox.addEventListener('change', toggleRequired);
-        toggleRequired(); // Run on page load
+        tagNoHardlinksCheckbox.addEventListener('change', toggleHardlinksFields);
+        toggleHardlinksFields(); // Run on page load
     });
 </script>
 {% endblock %} 

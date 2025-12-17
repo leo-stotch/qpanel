@@ -21,8 +21,6 @@ The tool can:
 - tag "unregistered" torrents with tag `unregistered`;
 - monitor for torrents in state `pausedUP`.
 
-![Main page](images/main.png)
-
 ## Getting Started
 
 ### Prerequisites

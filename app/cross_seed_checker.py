@@ -2,7 +2,7 @@ import requests
 import logging
 from app import db, Instance, TelegramMessage, ActionLog, load_settings
 from log_parser import send_telegram_message
-from qbt_client import get_client
+from qbt_client import get_client, get_all_torrents
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -42,7 +42,7 @@ def pause_cross_seeded_torrents_for_instance(instance, client):
     """
     settings = load_settings()
     try:
-        torrents = client.torrents_info()
+        torrents = get_all_torrents(client)
         # Get names of all torrents that are in any paused state.
         paused_torrent_names = {t.name for t in torrents if 'paused' in t.state.lower()}
 

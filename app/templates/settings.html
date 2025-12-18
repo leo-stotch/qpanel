@@ -37,38 +37,55 @@
                             <input class="form-check-input" type="checkbox" id="orphaned_scan_enabled" name="orphaned_scan_enabled" {% if settings.orphaned_scan_enabled %}checked{% endif %}>
                             <label class="form-check-label" for="orphaned_scan_enabled">Enable Orphaned Files Scan</label>
                         </div>
-                        <div class="form-group mb-1">
-                            <label for="orphaned_min_age_days" class="form-label">Orphaned Min Age (days)</label>
-                            <input type="number" class="form-control" id="orphaned_min_age_days" name="orphaned_min_age_days" value="{{ settings.orphaned_min_age_days or 7 }}" min="0">
-                            <small class="form-text text-muted">Only report files older than this many days.</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="orphaned_ignore_patterns" class="form-label">Ignore Patterns (regex)</label>
-                            <textarea class="form-control" id="orphaned_ignore_patterns" name="orphaned_ignore_patterns" rows="4" placeholder="One regex per line">{% if settings.orphaned_ignore_patterns %}{{ '\n'.join(settings.orphaned_ignore_patterns) }}{% endif %}</textarea>
-                            <small class="form-text text-muted">Files matching any regex here will be ignored during orphan scan.</small>
+                        <div id="orphaned_fields" style="{% if not settings.orphaned_scan_enabled %}display: none;{% endif %}">
+                            <div class="form-group mb-1">
+                                <label for="orphaned_min_age_days" class="form-label">Orphaned Min Age (days)</label>
+                                <input type="number" class="form-control" id="orphaned_min_age_days" name="orphaned_min_age_days" value="{{ settings.orphaned_min_age_days or 7 }}" min="0">
+                                <small class="form-text text-muted">Only report files older than this many days.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="orphaned_ignore_patterns" class="form-label">Ignore Patterns (regex)</label>
+                                <textarea class="form-control" id="orphaned_ignore_patterns" name="orphaned_ignore_patterns" rows="4" placeholder="One regex per line">{% if settings.orphaned_ignore_patterns %}{{ '\n'.join(settings.orphaned_ignore_patterns) }}{% endif %}</textarea>
+                                <small class="form-text text-muted">Files matching any regex here will be ignored during orphan scan.</small>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Telegram Notifications -->
+            <!-- Notifications -->
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h4>Telegram Notifications</h4>
+                        <h4>Notifications</h4>
                     </div>
                     <div class="card-body">
+                        <!-- Telegram -->
                         <div class="form-check form-switch mb-3">
                             <input class="form-check-input" type="checkbox" id="telegram_notification_enabled" name="telegram_notification_enabled" {% if settings.telegram_notification_enabled %}checked{% endif %}>
                             <label class="form-check-label" for="telegram_notification_enabled">Enable Telegram Notifications</label>
                         </div>
-                        <div class="form-group mb-3">
-                            <label for="telegram_bot_token" class="form-label">Telegram Bot Token</label>
-                            <input type="password" class="form-control" id="telegram_bot_token" name="telegram_bot_token" value="{{ settings.telegram_bot_token }}" placeholder="Token is hidden for security">
+                        <div id="telegram_fields" style="{% if not settings.telegram_notification_enabled %}display: none;{% endif %}">
+                            <div class="form-group mb-3">
+                                <label for="telegram_bot_token" class="form-label">Telegram Bot Token</label>
+                                <input type="password" class="form-control" id="telegram_bot_token" name="telegram_bot_token" value="{{ settings.telegram_bot_token }}" placeholder="Token is hidden for security">
+                            </div>
+                            <div class="form-group mb-3">
+                                <label for="telegram_chat_id" class="form-label">Telegram Chat ID</label>
+                                <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" value="{{ settings.telegram_chat_id }}">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="telegram_chat_id" class="form-label">Telegram Chat ID</label>
-                            <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" value="{{ settings.telegram_chat_id }}">
+                        <hr>
+                        <!-- Discord -->
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="discord_notification_enabled" name="discord_notification_enabled" {% if settings.discord_notification_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="discord_notification_enabled">Enable Discord Notifications</label>
+                        </div>
+                        <div id="discord_fields" style="{% if not settings.discord_notification_enabled %}display: none;{% endif %}">
+                            <div class="form-group">
+                                <label for="discord_webhook_url" class="form-label">Discord Webhook URL</label>
+                                <input type="text" class="form-control" id="discord_webhook_url" name="discord_webhook_url" value="{{ settings.discord_webhook_url }}" placeholder="https://discord.com/api/webhooks/...">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -107,4 +124,32 @@
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Telegram toggle
+            const telegramToggle = document.getElementById('telegram_notification_enabled');
+            const telegramFields = document.getElementById('telegram_fields');
+            
+            telegramToggle.addEventListener('change', function() {
+                telegramFields.style.display = this.checked ? 'block' : 'none';
+            });
+
+            // Discord toggle
+            const discordToggle = document.getElementById('discord_notification_enabled');
+            const discordFields = document.getElementById('discord_fields');
+            
+            discordToggle.addEventListener('change', function() {
+                discordFields.style.display = this.checked ? 'block' : 'none';
+            });
+
+            // Orphaned files scan toggle
+            const orphanedToggle = document.getElementById('orphaned_scan_enabled');
+            const orphanedFields = document.getElementById('orphaned_fields');
+            
+            orphanedToggle.addEventListener('change', function() {
+                orphanedFields.style.display = this.checked ? 'block' : 'none';
+            });
+        });
+    </script>
 {% endblock %} 

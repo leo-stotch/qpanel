@@ -21,6 +21,8 @@ DEFAULT_SETTINGS = {
     'telegram_bot_token': '',
     'telegram_chat_id': '',
     'telegram_notification_enabled': False,
+    'discord_webhook_url': '',
+    'discord_notification_enabled': False,
     'orphaned_scan_enabled': False,
     'orphaned_min_age_days': 7,
     'orphaned_ignore_patterns': []
@@ -189,6 +191,8 @@ def settings():
             'telegram_bot_token': request.form['telegram_bot_token'] if request.form['telegram_bot_token'] else current_settings.get('telegram_bot_token', ''),
             'telegram_chat_id': request.form['telegram_chat_id'],
             'telegram_notification_enabled': request.form.get('telegram_notification_enabled') == 'on',
+            'discord_webhook_url': request.form['discord_webhook_url'] if request.form.get('discord_webhook_url') else current_settings.get('discord_webhook_url', ''),
+            'discord_notification_enabled': request.form.get('discord_notification_enabled') == 'on',
             'orphaned_scan_enabled': request.form.get('orphaned_scan_enabled') == 'on',
             'orphaned_min_age_days': int(request.form.get('orphaned_min_age_days') or 7),
             'orphaned_ignore_patterns': parsed_patterns

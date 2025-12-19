@@ -24,17 +24,25 @@ def apply_rules_for_instance(instance, client, torrents):
     for torrent in torrents:
         for rule in instance.rules:
             matched = False
-            # Robustly check for tag match
+            # Parse rule condition values (can be comma-separated for multi-select)
+            rule_values = [v.strip() for v in rule.condition_value.split(',') if v.strip()]
+            
+            # Robustly check for tag match - match if ANY rule value matches ANY torrent tag
             if rule.condition_type == 'tag':
                 current_tags = [t.strip() for t in torrent.tags.split(',') if t.strip()]
-                if rule.condition_value in current_tags:
-                    matched = True
+                for rule_value in rule_values:
+                    if rule_value in current_tags:
+                        matched = True
+                        break
             
-            # Check for tracker match
+            # Check for tracker match - match if ANY rule value matches ANY tracker
             elif rule.condition_type == 'tracker':
                 for tracker in torrent.trackers:
-                    if rule.condition_value in tracker.url:
-                        matched = True
+                    for rule_value in rule_values:
+                        if rule_value in tracker.url:
+                            matched = True
+                            break
+                    if matched:
                         break
             
             if matched:

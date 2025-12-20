@@ -5,7 +5,7 @@ import logging
 import traceback
 from app import load_settings
 import os
-from cross_seed_checker import send_telegram_message
+from notifications import send_notification
 from app import TelegramMessage
 from datetime import datetime, timedelta
 from typing import Optional, Set, List, Tuple
@@ -135,6 +135,23 @@ def tag_torrents_with_no_hard_links(instance, client, torrents):
                 if has_noHL_tag:
                     client.torrents_remove_tags(tags='noHL', torrent_hashes=torrent.hash)
                     logger.info(f"Removed 'noHL' tag from '{torrent.name}' as it now has hard links.")
+                    
+                    # Reset share limits to global settings when noHL tag is removed
+                    client.torrents_set_share_limits(
+                        torrent_hashes=torrent.hash,
+                        ratio_limit=-1,  # Use global settings
+                        seeding_time_limit=-1,  # Use global settings
+                        inactive_seeding_time_limit=-1  # Use global settings
+                    )
+                    logger.info(f"Reset share limits for '{torrent.name}' to global settings.")
+                    
+                    # Log action
+                    log_entry = ActionLog(
+                        instance_id=instance.id,
+                        action=f"Removed 'noHL' tag from '{torrent.name}'",
+                        details="Torrent now has hard links. Share limits reset to global settings."
+                    )
+                    db.session.add(log_entry)
             else:
                 if not has_noHL_tag:
                     if torrent.completion_on > 0:
@@ -151,11 +168,10 @@ def tag_torrents_with_no_hard_links(instance, client, torrents):
                             )
                             db.session.add(log_entry)
 
-                            # Send Telegram notification
+                            # Send notification
                             settings = load_settings()
-                            if settings.get('telegram_notification_enabled'):
-                                message = f"Torrent '{torrent.name}' on '{instance.name}' was tagged with 'noHL' because it has no hard links and was completed over an hour ago."
-                                send_telegram_message(settings.get('telegram_bot_token'), settings.get('telegram_chat_id'), message, parse_mode='HTML')
+                            message = f"Torrent '{torrent.name}' on '{instance.name}' was tagged with 'noHL' because it has no hard links and was completed over an hour ago."
+                            send_notification(message, settings, parse_mode='HTML')
         
     except Exception as e:
         logger.error(f"Failed to check for no hard links for {instance.name}: {e}")
@@ -194,13 +210,12 @@ def tag_unregistered_torrents_for_instance(instance, client, torrents):
                 log_entry = ActionLog(instance_id=instance.id, action=f"Tagged '{torrent.name}' as unregistered", details=f"Tracker status: {offending_msg}")
                 db.session.add(log_entry)
 
-                # Send Telegram notification
+                # Send notification
                 settings = load_settings()
-                if settings.get('telegram_notification_enabled'):
-                    message = f"Tagged '{torrent.name}' as unregistered on '{instance.name}'.\nTracker status: {offending_msg}"
-                    if send_telegram_message(settings.get('telegram_bot_token'), settings.get('telegram_chat_id'), message, parse_mode='HTML'):
-                        new_message = TelegramMessage(message=message)
-                        db.session.add(new_message)
+                message = f"Tagged '{torrent.name}' as unregistered on '{instance.name}'.\nTracker status: {offending_msg}"
+                if send_notification(message, settings, parse_mode='HTML'):
+                    new_message = TelegramMessage(message=message)
+                    db.session.add(new_message)
         else:
             if has_unregistered_tag:
                 client.torrents_remove_tags(tags='unregistered', torrent_hashes=torrent.hash)
@@ -289,11 +304,10 @@ def monitor_paused_up_torrents_job():
                             db.session.add(log_entry)
                         db.session.commit()
 
-                        # Send Telegram notification
+                        # Send notification
                         settings = load_settings()
-                        if settings.get('telegram_notification_enabled'):
-                            message = f"PausedUP torrents detected on '{instance.name}':\n" + "\n".join(torrent_links)
-                            send_telegram_message(settings.get('telegram_bot_token'), settings.get('telegram_chat_id'), message, parse_mode='HTML')
+                        message = f"PausedUP torrents detected on '{instance.name}':\n" + "\n".join(torrent_links)
+                        send_notification(message, settings, parse_mode='HTML')
 
             except Exception as e:
                 logging.error(f"An unexpected error occurred in monitor_paused_up_torrents_job for instance '{instance.name}': {e}")
@@ -482,18 +496,18 @@ def detect_orphaned_files_job():
                             details=orphan
                         ))
 
-                    if settings.get('telegram_notification_enabled'):
-                        max_list = 10
-                        listed = "\n".join(orphaned[:max_list])
-                        more_count = max(0, len(orphaned) - max_list)
-                        more_text = f"\n...and {more_count} more" if more_count else ""
-                        message = (
-                            f"Orphaned files detected in '{mapped_root}' (>= {min_age_days}d).\n"
-                            f"Owner instance: {owner.name}\n"
-                            f"{listed}{more_text}"
-                        )
-                        if send_telegram_message(settings.get('telegram_bot_token'), settings.get('telegram_chat_id'), message, parse_mode='HTML'):
-                            db.session.add(TelegramMessage(message=message))
+                    # Send notification to enabled channels
+                    max_list = 10
+                    listed = "\n".join(orphaned[:max_list])
+                    more_count = max(0, len(orphaned) - max_list)
+                    more_text = f"\n...and {more_count} more" if more_count else ""
+                    message = (
+                        f"Orphaned files detected in '{mapped_root}' (>= {min_age_days}d).\n"
+                        f"Owner instance: {owner.name}\n"
+                        f"{listed}{more_text}"
+                    )
+                    if send_notification(message, settings, parse_mode='HTML'):
+                        db.session.add(TelegramMessage(message=message))
 
                     db.session.commit()
             except Exception as e:

@@ -436,6 +436,43 @@ def delete_rule(rule_id):
         flash('Rule not found.', 'danger')
     return redirect(url_for('rules'))
 
+@app.route('/api/test-telegram', methods=['POST'])
+def test_telegram():
+    """Send a test Telegram notification."""
+    from notifications import send_telegram_message
+    settings = load_settings()
+    
+    bot_token = settings.get('telegram_bot_token')
+    chat_id = settings.get('telegram_chat_id')
+    
+    if not bot_token or not chat_id:
+        return jsonify({'status': 'error', 'message': 'Telegram bot token or chat ID is not configured.'})
+    
+    message = "🔔 Test notification from qPanel!\n\nIf you see this, Telegram notifications are working correctly."
+    
+    if send_telegram_message(bot_token, chat_id, message):
+        return jsonify({'status': 'success', 'message': 'Test notification sent successfully!'})
+    else:
+        return jsonify({'status': 'error', 'message': 'Failed to send notification. Check your bot token and chat ID.'})
+
+@app.route('/api/test-discord', methods=['POST'])
+def test_discord():
+    """Send a test Discord notification."""
+    from notifications import send_discord_message
+    settings = load_settings()
+    
+    webhook_url = settings.get('discord_webhook_url')
+    
+    if not webhook_url:
+        return jsonify({'status': 'error', 'message': 'Discord webhook URL is not configured.'})
+    
+    message = "🔔 **Test notification from qPanel!**\n\nIf you see this, Discord notifications are working correctly."
+    
+    if send_discord_message(webhook_url, message):
+        return jsonify({'status': 'success', 'message': 'Test notification sent successfully!'})
+    else:
+        return jsonify({'status': 'error', 'message': 'Failed to send notification. Check your webhook URL.'})
+
 @app.route('/admin/restart', methods=['POST'])
 def restart():
     """Restarts the application by touching the main app file to trigger the reloader."""

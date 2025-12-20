@@ -74,6 +74,9 @@
                                 <label for="telegram_chat_id" class="form-label">Telegram Chat ID</label>
                                 <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" value="{{ settings.telegram_chat_id }}">
                             </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="test-telegram-btn" onclick="testNotification('telegram')">
+                                <i class="bi bi-send"></i> Test Telegram
+                            </button>
                         </div>
                         <hr>
                         <!-- Discord -->
@@ -82,10 +85,13 @@
                             <label class="form-check-label" for="discord_notification_enabled">Enable Discord Notifications</label>
                         </div>
                         <div id="discord_fields" style="{% if not settings.discord_notification_enabled %}display: none;{% endif %}">
-                            <div class="form-group">
+                            <div class="form-group mb-3">
                                 <label for="discord_webhook_url" class="form-label">Discord Webhook URL</label>
                                 <input type="text" class="form-control" id="discord_webhook_url" name="discord_webhook_url" value="{{ settings.discord_webhook_url }}" placeholder="https://discord.com/api/webhooks/...">
                             </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="test-discord-btn" onclick="testNotification('discord')">
+                                <i class="bi bi-send"></i> Test Discord
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -151,5 +157,45 @@
                 orphanedFields.style.display = this.checked ? 'block' : 'none';
             });
         });
+
+        function testNotification(type) {
+            const btn = document.getElementById(`test-${type}-btn`);
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Sending...';
+            
+            fetch(`/api/test-${type}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    btn.disabled = false;
+                    if (data.status === 'success') {
+                        btn.innerHTML = '<i class="bi bi-check-circle"></i> Sent!';
+                        btn.classList.remove('btn-outline-secondary');
+                        btn.classList.add('btn-success');
+                    } else {
+                        btn.innerHTML = '<i class="bi bi-x-circle"></i> Failed';
+                        btn.classList.remove('btn-outline-secondary');
+                        btn.classList.add('btn-danger');
+                        alert(data.message);
+                    }
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.classList.remove('btn-success', 'btn-danger');
+                        btn.classList.add('btn-outline-secondary');
+                    }, 3000);
+                })
+                .catch(error => {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-x-circle"></i> Error';
+                    btn.classList.remove('btn-outline-secondary');
+                    btn.classList.add('btn-danger');
+                    alert('Network error: ' + error);
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.classList.remove('btn-danger');
+                        btn.classList.add('btn-outline-secondary');
+                    }, 3000);
+                });
+        }
     </script>
 {% endblock %} 

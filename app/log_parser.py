@@ -1,23 +1,11 @@
 import re
-import httpx
 import logging
 from datetime import datetime
 from app import db, Instance, TelegramMessage, ActionLog, load_settings
+from notifications import send_notification
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def send_telegram_message(bot_token, chat_id, message, parse_mode='HTML'):
-    """Sends a message to a Telegram bot."""
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    params = {"chat_id": chat_id, "text": message, "parse_mode": parse_mode}
-    try:
-        response = httpx.post(url, params=params)
-        response.raise_for_status()
-        logging.info("Message sent successfully!")
-        return True
-    except httpx.HTTPError as e:
-        logging.error(f"Failed to send message: {e}")
-        return False
 
 def epoch_to_human_readable(epoch_timestamp):
     """Converts an epoch timestamp to a human-readable string."""
@@ -27,6 +15,7 @@ def epoch_to_human_readable(epoch_timestamp):
     except Exception as e:
         logging.error(f"Error converting epoch to human-readable timestamp: {e}")
         return "N/A"
+
 
 def process_logs_for_instance(instance, client):
     """Processes logs for a single instance."""
@@ -52,11 +41,10 @@ def process_logs_for_instance(instance, client):
                 )
                 db.session.add(action)
 
-                if settings.get('telegram_notification_enabled'):
-                    message_text = f"➖ {torrent_info} ({readable_timestamp}) on {instance.name}"
-                    if send_telegram_message(settings['telegram_bot_token'], settings['telegram_chat_id'], message_text):
-                        new_message = TelegramMessage(message=message_text)
-                        db.session.add(new_message)
+                message_text = f"➖ {torrent_info} ({readable_timestamp}) on {instance.name}"
+                if send_notification(message_text, settings):
+                    new_message = TelegramMessage(message=message_text)
+                    db.session.add(new_message)
             
             last_id = log['id']
 
@@ -66,6 +54,7 @@ def process_logs_for_instance(instance, client):
 
     except Exception as e:
         logging.error(f"Error processing logs for instance {instance.name}: {e}")
+
 
 def log_parsing_job():
     """Job to be scheduled for parsing logs from all enabled instances."""
@@ -82,4 +71,4 @@ def log_parsing_job():
                 except Exception as e:
                     logging.error(f"Failed to process logs for {instance.name}: {e}")
             else:
-                logging.warning(f"Could not connect to instance {instance.name} to parse logs.") 
+                logging.warning(f"Could not connect to instance {instance.name} to parse logs.")

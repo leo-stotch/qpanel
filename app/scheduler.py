@@ -220,7 +220,17 @@ def tag_unregistered_torrents_for_instance(instance, client, torrents):
             if has_unregistered_tag:
                 client.torrents_remove_tags(tags='unregistered', torrent_hashes=torrent.hash)
                 logger.info(f"Removed 'unregistered' tag from '{torrent.name}' on {instance.name}.")
-                log_entry = ActionLog(instance_id=instance.id, action=f"Removed 'unregistered' tag from '{torrent.name}'", details="Tracker status is now normal.")
+                
+                # Reset share limits to global settings when unregistered tag is removed
+                client.torrents_set_share_limits(
+                    torrent_hashes=torrent.hash,
+                    ratio_limit=-1,  # Use global settings
+                    seeding_time_limit=-1,  # Use global settings
+                    inactive_seeding_time_limit=-1  # Use global settings
+                )
+                logger.info(f"Reset share limits for '{torrent.name}' to global settings.")
+                
+                log_entry = ActionLog(instance_id=instance.id, action=f"Removed 'unregistered' tag from '{torrent.name}'", details="Tracker status is now normal. Share limits reset to global settings.")
                 db.session.add(log_entry)
 
 def apply_rules_job():

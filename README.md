@@ -5,8 +5,7 @@ qPanel is a web-based management tool for qBittorrent, designed to automate torr
 - applying seeding rules (i.e. `if a torrent has tag noHL, set seeding time to 43200 minutes`);
 - finding torrents without hard links;
 - pausing cross-seeded torrents;
-- finding unregistered torrents;
-- finding pausedUP torrents.
+- finding unregistered torrents.
 
 ![demo](qpanel_demo.gif "qPanel demo")
 
@@ -16,8 +15,7 @@ The tool can:
     - If one of the `trackers` is `bt.t-ru.org`, set `Max Upload Speed (KiB/s)` to `10`.
 - tag torrents that don't have hard links with tag `noHL` (useful for torrent clients used by Sonarr/Radarr);
 - pause cross-seeded torrents;
-- tag "unregistered" torrents with tag `unregistered`;
-- monitor for torrents in state `pausedUP`.
+- tag "unregistered" torrents with tag `unregistered`.
 
 ## Getting Started
 

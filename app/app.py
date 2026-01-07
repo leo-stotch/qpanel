@@ -68,7 +68,6 @@ class Instance(db.Model):
     tag_nohardlinks = db.Column(db.Boolean, default=False)
     pause_cross_seeded_torrents = db.Column(db.Boolean, default=False)
     tag_unregistered_torrents = db.Column(db.Boolean, default=False)
-    monitor_paused_up = db.Column(db.Boolean, default=False)
 
     def __repr__(self):
         return f'<Instance {self.name}>'
@@ -240,8 +239,7 @@ def instances():
             mapped_download_dir=request.form.get('mapped_download_dir'),
             tag_nohardlinks=request.form.get('tag_nohardlinks') == 'true',
             pause_cross_seeded_torrents=request.form.get('pause_cross_seeded_torrents') == 'true',
-            tag_unregistered_torrents=request.form.get('tag_unregistered_torrents') == 'true',
-            monitor_paused_up=request.form.get('monitor_paused_up') == 'on'
+            tag_unregistered_torrents=request.form.get('tag_unregistered_torrents') == 'true'
         )
         db.session.add(new_instance)
         db.session.commit()
@@ -286,7 +284,6 @@ def edit_instance(instance_id):
         instance.tag_nohardlinks = request.form.get('tag_nohardlinks') == 'true'
         instance.pause_cross_seeded_torrents = request.form.get('pause_cross_seeded_torrents') == 'true'
         instance.tag_unregistered_torrents = request.form.get('tag_unregistered_torrents') == 'true'
-        instance.monitor_paused_up = request.form.get('monitor_paused_up') == 'on'
         db.session.commit()
         flash(f"Instance '{instance.name}' updated successfully!", 'success')
         return redirect(url_for('instances'))
@@ -486,7 +483,7 @@ if __name__ == '__main__':
         db.create_all()
     
     settings = load_settings()
-    from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, monitor_paused_up_torrents_job, detect_orphaned_files_job
+    from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, detect_orphaned_files_job
     from cross_seed_checker import pause_cross_seeded_torrents_job
     scheduler = BackgroundScheduler()
 
@@ -497,8 +494,7 @@ if __name__ == '__main__':
     scheduler.add_job(func=tag_torrents_with_no_hard_links_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=1))
     scheduler.add_job(func=apply_rules_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=2))
     scheduler.add_job(func=pause_cross_seeded_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=3))
-    scheduler.add_job(func=monitor_paused_up_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
-    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=5))
+    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
     
     scheduler.start()
 

@@ -278,51 +278,6 @@ def tag_torrents_with_no_hard_links_job():
                 logging.error(f"An unexpected error occurred in tag_torrents_with_no_hard_links_job for instance '{instance.name}': {e}")
                 db.session.rollback()
 
-def monitor_paused_up_torrents_job():
-    """Scheduled job to monitor for torrents in pausedUP state."""
-    from app import app
-    with app.app_context():
-        instances = Instance.query.filter_by(monitor_paused_up=True).all()
-        for instance in instances:
-            try:
-                client = get_client(instance)
-                all_torrents = get_all_torrents(client)
-                paused_up_torrents = [t for t in all_torrents if t.state == 'pausedUP']
-
-                if paused_up_torrents:
-                    # Check against previously logged torrents to avoid repeat notifications
-                    already_logged_hashes = {
-                        log.details.split("'")[1] for log in ActionLog.query.filter(
-                            ActionLog.instance_id == instance.id,
-                            ActionLog.action == "pausedUP torrents detected"
-                        ).all() if log.details
-                    }
-
-                    newly_paused_up_torrents = [t for t in paused_up_torrents if t.hash not in already_logged_hashes]
-
-                    if newly_paused_up_torrents:
-                        torrent_links = [f"<a href='{instance.host}/#/torrent/{t.hash}'>{t.name}</a>" for t in newly_paused_up_torrents]
-                        logger.info(f"Found {len(torrent_links)} new pausedUP torrents on {instance.name}: {', '.join(torrent_links)}")
-                        
-                        # Log action
-                        for torrent in newly_paused_up_torrents:
-                            log_entry = ActionLog(
-                                instance_id=instance.id,
-                                action="pausedUP torrents detected",
-                                details=f"Torrent: '{torrent.hash}'" # Log hash to prevent duplicates
-                            )
-                            db.session.add(log_entry)
-                        db.session.commit()
-
-                        # Send notification
-                        settings = load_settings()
-                        message = f"PausedUP torrents detected on '{instance.name}':\n" + "\n".join(torrent_links)
-                        send_notification(message, settings, parse_mode='HTML')
-
-            except Exception as e:
-                logging.error(f"An unexpected error occurred in monitor_paused_up_torrents_job for instance '{instance.name}': {e}")
-                db.session.rollback()
-
 def _map_qbt_path_to_local(instance: Instance, qbt_path: str) -> Optional[str]:
     """Translate a qBittorrent-visible path to the local filesystem path using the instance mapping.
 

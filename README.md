@@ -6,8 +6,7 @@ qPanel is a web-based management tool for qBittorrent, designed to automate torr
 - finding torrents without hard links;
 - pausing cross-seeded torrents;
 - finding unregistered torrents;
-- finding pausedUP torrents;
-- finding events about deleted torrents in qBittorrent API logs.
+- finding pausedUP torrents.
 
 ![demo](qpanel_demo.gif "qPanel demo")
 
@@ -16,7 +15,6 @@ The tool can:
     - If a torrent has tag `noHL`, set `Share Limit Time` to `43200 minutes`;
     - If one of the `trackers` is `bt.t-ru.org`, set `Max Upload Speed (KiB/s)` to `10`.
 - tag torrents that don't have hard links with tag `noHL` (useful for torrent clients used by Sonarr/Radarr);
-- look for deleted torrents in qBittorrent logs via API;
 - pause cross-seeded torrents;
 - tag "unregistered" torrents with tag `unregistered`;
 - monitor for torrents in state `pausedUP`.

@@ -65,12 +65,10 @@ class Instance(db.Model):
     logs = db.relationship('ActionLog', backref='instance', lazy=True, cascade="all, delete-orphan")
     qbt_download_dir = db.Column(db.String(500))
     mapped_download_dir = db.Column(db.String(500))
-    look_for_deleted_torrents = db.Column(db.Boolean, default=False)
     tag_nohardlinks = db.Column(db.Boolean, default=False)
     pause_cross_seeded_torrents = db.Column(db.Boolean, default=False)
     tag_unregistered_torrents = db.Column(db.Boolean, default=False)
     monitor_paused_up = db.Column(db.Boolean, default=False)
-    last_processed_log_id = db.Column(db.Integer, default=0)
 
     def __repr__(self):
         return f'<Instance {self.name}>'
@@ -240,7 +238,6 @@ def instances():
             password=request.form['password'],
             qbt_download_dir=request.form.get('qbt_download_dir'),
             mapped_download_dir=request.form.get('mapped_download_dir'),
-            look_for_deleted_torrents=request.form.get('look_for_deleted_torrents') == 'true',
             tag_nohardlinks=request.form.get('tag_nohardlinks') == 'true',
             pause_cross_seeded_torrents=request.form.get('pause_cross_seeded_torrents') == 'true',
             tag_unregistered_torrents=request.form.get('tag_unregistered_torrents') == 'true',
@@ -286,7 +283,6 @@ def edit_instance(instance_id):
             instance.password = request.form['password']
         instance.qbt_download_dir = request.form.get('qbt_download_dir')
         instance.mapped_download_dir = request.form.get('mapped_download_dir')
-        instance.look_for_deleted_torrents = request.form.get('look_for_deleted_torrents') == 'true'
         instance.tag_nohardlinks = request.form.get('tag_nohardlinks') == 'true'
         instance.pause_cross_seeded_torrents = request.form.get('pause_cross_seeded_torrents') == 'true'
         instance.tag_unregistered_torrents = request.form.get('tag_unregistered_torrents') == 'true'
@@ -491,7 +487,6 @@ if __name__ == '__main__':
     
     settings = load_settings()
     from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, monitor_paused_up_torrents_job, detect_orphaned_files_job
-    from log_parser import log_parsing_job
     from cross_seed_checker import pause_cross_seeded_torrents_job
     scheduler = BackgroundScheduler()
 
@@ -502,9 +497,8 @@ if __name__ == '__main__':
     scheduler.add_job(func=tag_torrents_with_no_hard_links_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=1))
     scheduler.add_job(func=apply_rules_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=2))
     scheduler.add_job(func=pause_cross_seeded_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=3))
-    scheduler.add_job(func=log_parsing_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
-    scheduler.add_job(func=monitor_paused_up_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=5))
-    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=6))
+    scheduler.add_job(func=monitor_paused_up_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
+    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=5))
     
     scheduler.start()
 

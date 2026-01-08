@@ -32,6 +32,7 @@
                 <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="bi bi-house-door"></i>Home</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint == 'instances' or request.endpoint == 'edit_instance' %}active{% endif %}" href="{{ url_for('instances') }}"><i class="bi bi-server"></i>Instances</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint == 'rules' or request.endpoint == 'edit_rule' %}active{% endif %}" href="{{ url_for('rules') }}"><i class="bi bi-diagram-3"></i>Rules</a></li>
+                <li class="nav-item"><a class="nav-link {% if request.endpoint == 'orphaned_files' %}active{% endif %}" href="{{ url_for('orphaned_files') }}"><i class="bi bi-file-earmark-x"></i>Orphaned Files</a></li>
                 <li class="nav-item"><a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}"><i class="bi bi-gear"></i>Settings</a></li>
             </ul>
         </div>
@@ -46,6 +47,7 @@
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="bi bi-house-door"></i>Home</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'instances' or request.endpoint == 'edit_instance' %}active{% endif %}" href="{{ url_for('instances') }}"><i class="bi bi-server"></i>Instances</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'rules' or request.endpoint == 'edit_rule' %}active{% endif %}" href="{{ url_for('rules') }}"><i class="bi bi-diagram-3"></i>Rules</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'orphaned_files' %}active{% endif %}" href="{{ url_for('orphaned_files') }}"><i class="bi bi-file-earmark-x"></i>Orphaned Files</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}"><i class="bi bi-gear"></i>Settings</a></li>
                 </ul>
             </aside>

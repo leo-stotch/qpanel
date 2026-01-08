@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 import uuid
 import time
 import json
@@ -22,10 +23,7 @@ DEFAULT_SETTINGS = {
     'telegram_chat_id': '',
     'telegram_notification_enabled': False,
     'discord_webhook_url': '',
-    'discord_notification_enabled': False,
-    'orphaned_scan_enabled': False,
-    'orphaned_min_age_days': 7,
-    'orphaned_ignore_patterns': []
+    'discord_notification_enabled': False
 }
 
 def load_settings():
@@ -47,6 +45,7 @@ app.secret_key = 'supersecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(DATA_DIR, 'qpanel.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # Association table for the many-to-many relationship between Instance and Rule
 instance_rules = db.Table('instance_rules',
@@ -65,12 +64,13 @@ class Instance(db.Model):
     logs = db.relationship('ActionLog', backref='instance', lazy=True, cascade="all, delete-orphan")
     qbt_download_dir = db.Column(db.String(500))
     mapped_download_dir = db.Column(db.String(500))
-    look_for_deleted_torrents = db.Column(db.Boolean, default=False)
     tag_nohardlinks = db.Column(db.Boolean, default=False)
     pause_cross_seeded_torrents = db.Column(db.Boolean, default=False)
     tag_unregistered_torrents = db.Column(db.Boolean, default=False)
-    monitor_paused_up = db.Column(db.Boolean, default=False)
-    last_processed_log_id = db.Column(db.Integer, default=0)
+    orphaned_scan_enabled = db.Column(db.Boolean, default=False)
+    orphaned_min_age_days = db.Column(db.Integer, default=7)
+    orphaned_ignore_patterns = db.Column(db.Text, default='')
+    orphaned_files = db.relationship('OrphanedFile', backref='instance', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f'<Instance {self.name}>'
@@ -96,6 +96,14 @@ class ActionLog(db.Model):
     instance_id = db.Column(db.Integer, db.ForeignKey('instance.id'), nullable=False)
     action = db.Column(db.String(255), nullable=False)
     details = db.Column(db.Text, nullable=True)
+
+class OrphanedFile(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    instance_id = db.Column(db.Integer, db.ForeignKey('instance.id'), nullable=False)
+    file_path = db.Column(db.Text, nullable=False)
+    file_size = db.Column(db.BigInteger, nullable=True)
+    file_mtime = db.Column(db.DateTime, nullable=True)
 
 @app.route('/')
 def index():
@@ -182,9 +190,6 @@ def clear_telegram_messages():
 def settings():
     if request.method == 'POST':
         current_settings = load_settings()
-        # Parse ignore patterns from textarea (one regex per line)
-        raw_patterns = request.form.get('orphaned_ignore_patterns', '')
-        parsed_patterns = [p.strip() for p in raw_patterns.splitlines() if p.strip()]
         new_settings = {
             'scheduler_interval_minutes': int(request.form['scheduler_interval_minutes']),
             'cache_duration_minutes': int(request.form['cache_duration_minutes']),
@@ -192,16 +197,59 @@ def settings():
             'telegram_chat_id': request.form['telegram_chat_id'],
             'telegram_notification_enabled': request.form.get('telegram_notification_enabled') == 'on',
             'discord_webhook_url': request.form['discord_webhook_url'] if request.form.get('discord_webhook_url') else current_settings.get('discord_webhook_url', ''),
-            'discord_notification_enabled': request.form.get('discord_notification_enabled') == 'on',
-            'orphaned_scan_enabled': request.form.get('orphaned_scan_enabled') == 'on',
-            'orphaned_min_age_days': int(request.form.get('orphaned_min_age_days') or 7),
-            'orphaned_ignore_patterns': parsed_patterns
+            'discord_notification_enabled': request.form.get('discord_notification_enabled') == 'on'
         }
         save_settings(new_settings)
         flash('Settings saved successfully! Please restart the application for the new interval to take effect.', 'success')
         return redirect(url_for('settings'))
 
     return render_template('settings.html', settings=load_settings())
+
+@app.route('/orphaned-files')
+def orphaned_files():
+    instances = Instance.query.all()
+    orphaned = OrphanedFile.query.order_by(OrphanedFile.timestamp.desc()).all()
+    return render_template('orphaned_files.html', instances=instances, orphaned_files=orphaned)
+
+@app.route('/orphaned-files/settings/<instance_id>', methods=['POST'])
+def update_orphaned_settings(instance_id):
+    instance = Instance.query.get_or_404(instance_id)
+    instance.orphaned_scan_enabled = request.form.get('orphaned_scan_enabled') == 'on'
+    instance.orphaned_min_age_days = int(request.form.get('orphaned_min_age_days') or 7)
+    raw_patterns = request.form.get('orphaned_ignore_patterns', '')
+    instance.orphaned_ignore_patterns = raw_patterns
+    db.session.commit()
+    flash(f"Orphaned files settings for '{instance.name}' updated successfully!", 'success')
+    return redirect(url_for('orphaned_files'))
+
+@app.route('/orphaned-files/clear', methods=['POST'])
+def clear_orphaned_files():
+    instance_id = request.form.get('instance_id')
+    try:
+        if instance_id:
+            num_rows_deleted = db.session.query(OrphanedFile).filter_by(instance_id=instance_id).delete()
+            instance = Instance.query.get(instance_id)
+            flash(f'Successfully cleared {num_rows_deleted} orphaned files for {instance.name}.', 'success')
+        else:
+            num_rows_deleted = db.session.query(OrphanedFile).delete()
+            flash(f'Successfully cleared {num_rows_deleted} orphaned files.', 'success')
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error clearing orphaned files: {e}', 'danger')
+    return redirect(url_for('orphaned_files'))
+
+@app.route('/orphaned-files/delete/<int:file_id>', methods=['POST'])
+def delete_orphaned_file(file_id):
+    orphaned_file = OrphanedFile.query.get_or_404(file_id)
+    try:
+        db.session.delete(orphaned_file)
+        db.session.commit()
+        flash('Orphaned file entry removed.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error removing file entry: {e}', 'danger')
+    return redirect(url_for('orphaned_files'))
 
 @app.route('/admin/remove-db', methods=['POST'])
 def remove_db():
@@ -240,11 +288,9 @@ def instances():
             password=request.form['password'],
             qbt_download_dir=request.form.get('qbt_download_dir'),
             mapped_download_dir=request.form.get('mapped_download_dir'),
-            look_for_deleted_torrents=request.form.get('look_for_deleted_torrents') == 'true',
             tag_nohardlinks=request.form.get('tag_nohardlinks') == 'true',
             pause_cross_seeded_torrents=request.form.get('pause_cross_seeded_torrents') == 'true',
-            tag_unregistered_torrents=request.form.get('tag_unregistered_torrents') == 'true',
-            monitor_paused_up=request.form.get('monitor_paused_up') == 'on'
+            tag_unregistered_torrents=request.form.get('tag_unregistered_torrents') == 'true'
         )
         db.session.add(new_instance)
         db.session.commit()
@@ -286,11 +332,9 @@ def edit_instance(instance_id):
             instance.password = request.form['password']
         instance.qbt_download_dir = request.form.get('qbt_download_dir')
         instance.mapped_download_dir = request.form.get('mapped_download_dir')
-        instance.look_for_deleted_torrents = request.form.get('look_for_deleted_torrents') == 'true'
         instance.tag_nohardlinks = request.form.get('tag_nohardlinks') == 'true'
         instance.pause_cross_seeded_torrents = request.form.get('pause_cross_seeded_torrents') == 'true'
         instance.tag_unregistered_torrents = request.form.get('tag_unregistered_torrents') == 'true'
-        instance.monitor_paused_up = request.form.get('monitor_paused_up') == 'on'
         db.session.commit()
         flash(f"Instance '{instance.name}' updated successfully!", 'success')
         return redirect(url_for('instances'))
@@ -490,8 +534,7 @@ if __name__ == '__main__':
         db.create_all()
     
     settings = load_settings()
-    from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, monitor_paused_up_torrents_job, detect_orphaned_files_job
-    from log_parser import log_parsing_job
+    from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, detect_orphaned_files_job
     from cross_seed_checker import pause_cross_seeded_torrents_job
     scheduler = BackgroundScheduler()
 
@@ -502,9 +545,7 @@ if __name__ == '__main__':
     scheduler.add_job(func=tag_torrents_with_no_hard_links_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=1))
     scheduler.add_job(func=apply_rules_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=2))
     scheduler.add_job(func=pause_cross_seeded_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=3))
-    scheduler.add_job(func=log_parsing_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
-    scheduler.add_job(func=monitor_paused_up_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=5))
-    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=6))
+    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
     
     scheduler.start()
 

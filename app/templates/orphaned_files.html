@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Orphaned Files - qPanel{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <h2 class="mb-4">Orphaned Files</h2>
+    <p class="text-muted">Manage orphaned file detection per qBittorrent instance. Orphaned files are files on disk that are not associated with any torrent.</p>
+
+    <!-- Instance Settings -->
+    <div class="row mb-4">
+        {% for instance in instances %}
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ instance.name }}</h5>
+                    {% if instance.orphaned_scan_enabled %}
+                    <span class="badge bg-success">Enabled</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Disabled</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('update_orphaned_settings', instance_id=instance.id) }}">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input orphan-toggle" type="checkbox" id="orphaned_scan_enabled_{{ instance.id }}" name="orphaned_scan_enabled" {% if instance.orphaned_scan_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="orphaned_scan_enabled_{{ instance.id }}">Enable Orphaned Files Scan</label>
+                        </div>
+                        
+                        <div class="orphaned-settings" id="orphaned_settings_{{ instance.id }}" style="{% if not instance.orphaned_scan_enabled %}display: none;{% endif %}">
+                            <div class="form-group mb-3">
+                                <label for="orphaned_min_age_days_{{ instance.id }}" class="form-label">Min Age (days)</label>
+                                <input type="number" class="form-control" id="orphaned_min_age_days_{{ instance.id }}" name="orphaned_min_age_days" value="{{ instance.orphaned_min_age_days or 7 }}" min="0">
+                                <small class="form-text text-muted">Only report files older than this many days.</small>
+                            </div>
+                            
+                            <div class="form-group mb-3">
+                                <label class="form-label">Path Mapping</label>
+                                {% if instance.qbt_download_dir and instance.mapped_download_dir %}
+                                <div class="alert alert-info py-2 mb-0">
+                                    <small>
+                                        <strong>qBt:</strong> <code>{{ instance.qbt_download_dir }}</code><br>
+                                        <strong>Local:</strong> <code>{{ instance.mapped_download_dir }}</code>
+                                    </small>
+                                </div>
+                                {% else %}
+                                <div class="alert alert-warning py-2 mb-0">
+                                    <small>Path mapping not configured. <a href="{{ url_for('edit_instance', instance_id=instance.id) }}">Configure it</a> in the instance settings.</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="form-group mb-3">
+                                <label for="orphaned_ignore_patterns_{{ instance.id }}" class="form-label">Ignore Patterns (regex)</label>
+                                <textarea class="form-control" id="orphaned_ignore_patterns_{{ instance.id }}" name="orphaned_ignore_patterns" rows="3" placeholder="One regex per line">{{ instance.orphaned_ignore_patterns or '' }}</textarea>
+                                <small class="form-text text-muted">Files matching any regex will be ignored.</small>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-sm">Save Settings</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">No instances configured. <a href="{{ url_for('instances') }}">Add an instance</a> first.</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <hr class="my-4">
+
+    <!-- Detected Orphaned Files -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Detected Orphaned Files</h3>
+        {% if orphaned_files %}
+        <form method="post" action="{{ url_for('clear_orphaned_files') }}" onsubmit="return confirm('Are you sure you want to clear all orphaned file entries?');">
+            <button type="submit" class="btn btn-outline-danger btn-sm">Clear All</button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if orphaned_files %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Instance</th>
+                        <th>File Path</th>
+                        <th>Size</th>
+                        <th>Modified</th>
+                        <th>Detected</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in orphaned_files %}
+                    <tr>
+                        <td><span class="badge bg-primary">{{ file.instance.name }}</span></td>
+                        <td>
+                            <code class="small" style="word-break: break-all;">{{ file.file_path }}</code>
+                        </td>
+                        <td>
+                            {% if file.file_size %}
+                            {{ (file.file_size / 1024 / 1024) | round(2) }} MB
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if file.file_mtime %}
+                            {{ file.file_mtime.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td>{{ file.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td class="text-end">
+                            <form method="post" action="{{ url_for('delete_orphaned_file', file_id=file.id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Remove from list">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-secondary">
+        <i class="bi bi-check-circle"></i> No orphaned files detected. Files will appear here after the next scheduled scan.
+    </div>
+    {% endif %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.orphan-toggle').forEach(function(toggle) {
+                toggle.addEventListener('change', function() {
+                    const instanceId = this.id.split('_').pop();
+                    const settingsDiv = document.getElementById('orphaned_settings_' + instanceId);
+                    settingsDiv.style.display = this.checked ? 'block' : 'none';
+                });
+            });
+        });
+    </script>
+{% endblock %}

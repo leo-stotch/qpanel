@@ -73,11 +73,6 @@
                     </div>
                     <div class="card-body">
                         <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" type="checkbox" id="look_for_deleted_torrents" name="look_for_deleted_torrents" value="true" {% if instance.look_for_deleted_torrents %}checked{% endif %}>
-                            <label class="form-check-label" for="look_for_deleted_torrents">Look for deleted torrents in logs</label>
-                            <small class="form-text text-muted d-block">If enabled, the application will scan qBittorrent logs for entries about deleted torrents and record them in the recent activity.</small>
-                        </div>
-                        <div class="form-check form-switch mb-2">
                             <input class="form-check-input" type="checkbox" id="pause_cross_seeded_torrents" name="pause_cross_seeded_torrents" value="true" {% if instance.pause_cross_seeded_torrents %}checked{% endif %}>
                             <label class="form-check-label" for="pause_cross_seeded_torrents">Pause Cross-Seeded Torrents</label>
                             <small class="form-text text-muted d-block">If enabled, the application will pause torrents that have the same name as a torrent that is already paused.</small>
@@ -86,10 +81,6 @@
                             <input class="form-check-input" type="checkbox" id="tag_unregistered_torrents" name="tag_unregistered_torrents" value="true" {% if instance.tag_unregistered_torrents %}checked{% endif %}>
                             <label class="form-check-label" for="tag_unregistered_torrents">Tag Unregistered Torrents</label>
                             <small class="form-text text-muted d-block">If enabled, the application will tag torrents with "unregistered" if their tracker status indicates they are no longer registered.</small>
-                        </div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="monitor_paused_up" name="monitor_paused_up" value="on" {% if instance.monitor_paused_up %}checked{% endif %}>
-                            <label class="form-check-label" for="monitor_paused_up">Monitor for pausedUP torrents</label>
                         </div>
                     </div>
                 </div>

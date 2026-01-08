@@ -1,4 +1,4 @@
-from app import app, db, Instance, ActionLog
+from app import app, db, Instance, ActionLog, OrphanedFile
 from qbt_client import get_client, get_all_torrents
 from flask import flash
 import logging
@@ -278,51 +278,6 @@ def tag_torrents_with_no_hard_links_job():
                 logging.error(f"An unexpected error occurred in tag_torrents_with_no_hard_links_job for instance '{instance.name}': {e}")
                 db.session.rollback()
 
-def monitor_paused_up_torrents_job():
-    """Scheduled job to monitor for torrents in pausedUP state."""
-    from app import app
-    with app.app_context():
-        instances = Instance.query.filter_by(monitor_paused_up=True).all()
-        for instance in instances:
-            try:
-                client = get_client(instance)
-                all_torrents = get_all_torrents(client)
-                paused_up_torrents = [t for t in all_torrents if t.state == 'pausedUP']
-
-                if paused_up_torrents:
-                    # Check against previously logged torrents to avoid repeat notifications
-                    already_logged_hashes = {
-                        log.details.split("'")[1] for log in ActionLog.query.filter(
-                            ActionLog.instance_id == instance.id,
-                            ActionLog.action == "pausedUP torrents detected"
-                        ).all() if log.details
-                    }
-
-                    newly_paused_up_torrents = [t for t in paused_up_torrents if t.hash not in already_logged_hashes]
-
-                    if newly_paused_up_torrents:
-                        torrent_links = [f"<a href='{instance.host}/#/torrent/{t.hash}'>{t.name}</a>" for t in newly_paused_up_torrents]
-                        logger.info(f"Found {len(torrent_links)} new pausedUP torrents on {instance.name}: {', '.join(torrent_links)}")
-                        
-                        # Log action
-                        for torrent in newly_paused_up_torrents:
-                            log_entry = ActionLog(
-                                instance_id=instance.id,
-                                action="pausedUP torrents detected",
-                                details=f"Torrent: '{torrent.hash}'" # Log hash to prevent duplicates
-                            )
-                            db.session.add(log_entry)
-                        db.session.commit()
-
-                        # Send notification
-                        settings = load_settings()
-                        message = f"PausedUP torrents detected on '{instance.name}':\n" + "\n".join(torrent_links)
-                        send_notification(message, settings, parse_mode='HTML')
-
-            except Exception as e:
-                logging.error(f"An unexpected error occurred in monitor_paused_up_torrents_job for instance '{instance.name}': {e}")
-                db.session.rollback()
-
 def _map_qbt_path_to_local(instance: Instance, qbt_path: str) -> Optional[str]:
     """Translate a qBittorrent-visible path to the local filesystem path using the instance mapping.
 
@@ -442,23 +397,32 @@ def _find_orphaned_files(mapped_root: str, expected_paths: Set[str], expected_in
     return orphans
 
 def detect_orphaned_files_job():
-    """Scheduled job to detect orphaned files across all instances and notify instead of removing.
+    """Scheduled job to detect orphaned files for instances with orphan scanning enabled.
 
     Collects expected files from ALL instances globally, then scans each unique mapped directory
     to avoid false positives when files are managed by different instances.
+    Stores detected orphaned files in the database for display on the Orphaned Files page.
     """
-    settings = load_settings()
-    if not settings.get('orphaned_scan_enabled'):
-        return
-    min_age_days = int(settings.get('orphaned_min_age_days', 7))
-    ignore_patterns = settings.get('orphaned_ignore_patterns') or []
-
     with app.app_context():
-        instances = [i for i in Instance.query.all() if i.qbt_download_dir and i.mapped_download_dir]
+        # Get instances with orphan scanning enabled and path mappings configured
+        scan_enabled_instances = [
+            i for i in Instance.query.filter_by(orphaned_scan_enabled=True).all()
+            if i.qbt_download_dir and i.mapped_download_dir
+        ]
         
-        # First, collect ALL expected files from ALL instances globally
+        if not scan_enabled_instances:
+            logger.info("No instances with orphan scanning enabled")
+            return
+
+        # Get ALL instances with path mappings for building expected paths
+        all_mapped_instances = [
+            i for i in Instance.query.all()
+            if i.qbt_download_dir and i.mapped_download_dir
+        ]
+
+        # Collect ALL expected files from ALL instances globally
         global_expected_paths: Set[str] = set()
-        for inst in instances:
+        for inst in all_mapped_instances:
             client = get_client(inst)
             if not client:
                 logger.warning(f"Could not connect to instance '{inst.name}'")
@@ -479,47 +443,55 @@ def detect_orphaned_files_job():
         global_expected_inodes = _collect_inodes(global_expected_paths)
         logger.info(f"Total global expected inodes: {len(global_expected_inodes)}")
 
-        # Group instances by mapped root for scanning purposes
-        groups = {}
-        for inst in instances:
-            real_group_key = os.path.realpath(os.path.normpath(inst.mapped_download_dir))
-            groups.setdefault(real_group_key, []).append(inst)
-
-        for mapped_root, group_instances in groups.items():
+        # Process each instance with orphan scanning enabled
+        for instance in scan_enabled_instances:
             try:
-                logger.info(f"Scanning mapped root '{mapped_root}' for orphans")
-                # Use global expected paths and inodes for orphan detection
+                min_age_days = instance.orphaned_min_age_days or 7
+                ignore_patterns_raw = instance.orphaned_ignore_patterns or ''
+                ignore_patterns = [p.strip() for p in ignore_patterns_raw.splitlines() if p.strip()]
+                
+                mapped_root = os.path.realpath(os.path.normpath(instance.mapped_download_dir))
+                logger.info(f"Scanning mapped root '{mapped_root}' for orphans (instance: {instance.name})")
+                
                 orphaned = _find_orphaned_files(mapped_root, global_expected_paths, global_expected_inodes, min_age_days, ignore_patterns)
-                logger.info(f"Found {len(orphaned)} orphaned files in '{mapped_root}'")
+                logger.info(f"Found {len(orphaned)} orphaned files for instance '{instance.name}'")
                 
                 if orphaned:
-                    # Log some examples for debugging
-                    for i, orphan in enumerate(orphaned[:3]):
-                        logger.info(f"Orphan example {i+1}: {orphan}")
+                    # Get existing orphaned file paths for this instance to avoid duplicates
+                    existing_paths = {
+                        of.file_path for of in OrphanedFile.query.filter_by(instance_id=instance.id).all()
+                    }
                     
-                    # Attribute logs to the first instance in the group
-                    owner = group_instances[0]
-                    for orphan in orphaned:
-                        db.session.add(ActionLog(
-                            instance_id=owner.id,
-                            action="Orphaned file detected",
-                            details=orphan
+                    new_orphans = [o for o in orphaned if o not in existing_paths]
+                    logger.info(f"Found {len(new_orphans)} NEW orphaned files for instance '{instance.name}'")
+                    
+                    for orphan_path in new_orphans:
+                        try:
+                            stat = os.stat(orphan_path)
+                            file_size = stat.st_size
+                            file_mtime = datetime.fromtimestamp(stat.st_mtime)
+                        except (FileNotFoundError, PermissionError):
+                            file_size = None
+                            file_mtime = None
+                        
+                        db.session.add(OrphanedFile(
+                            instance_id=instance.id,
+                            file_path=orphan_path,
+                            file_size=file_size,
+                            file_mtime=file_mtime
                         ))
-
-                    # Send notification to enabled channels
-                    max_list = 10
-                    listed = "\n".join(orphaned[:max_list])
-                    more_count = max(0, len(orphaned) - max_list)
-                    more_text = f"\n...and {more_count} more" if more_count else ""
-                    message = (
-                        f"Orphaned files detected in '{mapped_root}' (>= {min_age_days}d).\n"
-                        f"Owner instance: {owner.name}\n"
-                        f"{listed}{more_text}"
-                    )
-                    if send_notification(message, settings, parse_mode='HTML'):
-                        db.session.add(TelegramMessage(message=message))
-
-                    db.session.commit()
+                    
+                    if new_orphans:
+                        db.session.commit()
+                        logger.info(f"Saved {len(new_orphans)} new orphaned files for instance '{instance.name}'")
+                
+                # Clean up entries for files that no longer exist or are no longer orphaned
+                existing_entries = OrphanedFile.query.filter_by(instance_id=instance.id).all()
+                for entry in existing_entries:
+                    if not os.path.exists(entry.file_path) or entry.file_path in global_expected_paths:
+                        db.session.delete(entry)
+                db.session.commit()
+                
             except Exception as e:
-                logging.error(f"An unexpected error occurred in detect_orphaned_files_job for mapped root '{mapped_root}': {e}")
+                logging.error(f"An unexpected error occurred in detect_orphaned_files_job for instance '{instance.name}': {e}")
                 db.session.rollback()

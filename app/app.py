@@ -205,11 +205,228 @@ def settings():
 
     return render_template('settings.html', settings=load_settings())
 
+def group_orphaned_files_by_directory(orphaned_files):
+    """
+    Group orphaned files by their common parent directories.
+    Returns a structure like:
+    {
+        'instance_id': {
+            'instance': Instance,
+            'groups': [
+                {
+                    'directory': '/downloads/Movie.2022...',
+                    'files': [OrphanedFile, ...],
+                    'total_size': 12345678
+                },
+                ...
+            ],
+            'ungrouped': [OrphanedFile, ...]  # Files that don't share a parent with others
+        }
+    }
+    """
+    from collections import defaultdict
+    
+    # First, organize files by instance
+    files_by_instance = defaultdict(list)
+    instances_map = {}
+    for f in orphaned_files:
+        files_by_instance[f.instance_id].append(f)
+        instances_map[f.instance_id] = f.instance
+    
+    result = {}
+    
+    for instance_id, files in files_by_instance.items():
+        # Group files by their parent directories
+        files_by_parent = defaultdict(list)
+        for f in files:
+            # Get the parent directory (one level up from the file)
+            parent = os.path.dirname(f.file_path)
+            files_by_parent[parent].append(f)
+        
+        # Find common ancestors for directories that share a parent
+        # We want to find the "release folder" level grouping
+        def find_common_grouping_directory(file_path):
+            """
+            Find the appropriate grouping directory for a file.
+            This looks for common media release folder patterns.
+            """
+            parts = file_path.split('/')
+            # Skip empty parts
+            parts = [p for p in parts if p]
+            
+            # Return the first two levels after root (e.g., /downloads/ReleaseName)
+            # This typically captures the release folder
+            if len(parts) >= 2:
+                return '/' + '/'.join(parts[:2])
+            elif len(parts) == 1:
+                return '/' + parts[0]
+            return '/'
+        
+        # Group by the common release directory
+        files_by_release = defaultdict(list)
+        for f in files:
+            release_dir = find_common_grouping_directory(f.file_path)
+            files_by_release[release_dir].append(f)
+        
+        groups = []
+        ungrouped = []
+        
+        for directory, dir_files in sorted(files_by_release.items()):
+            if len(dir_files) > 1:
+                # Multiple files in this directory - create a group
+                total_size = sum(f.file_size or 0 for f in dir_files)
+                # Sort files within group by path
+                dir_files.sort(key=lambda x: x.file_path)
+                groups.append({
+                    'directory': directory,
+                    'files': dir_files,
+                    'total_size': total_size
+                })
+            else:
+                # Single file - add to ungrouped
+                ungrouped.extend(dir_files)
+        
+        # Sort groups by directory name
+        groups.sort(key=lambda x: x['directory'])
+        
+        result[instance_id] = {
+            'instance': instances_map[instance_id],
+            'groups': groups,
+            'ungrouped': ungrouped
+        }
+    
+    return result
+
 @app.route('/orphaned-files')
 def orphaned_files():
     instances = Instance.query.all()
     orphaned = OrphanedFile.query.order_by(OrphanedFile.timestamp.desc()).all()
-    return render_template('orphaned_files.html', instances=instances, orphaned_files=orphaned)
+    grouped_files = group_orphaned_files_by_directory(orphaned)
+    return render_template('orphaned_files.html', instances=instances, orphaned_files=orphaned, grouped_files=grouped_files)
+
+@app.route('/api/orphaned-files/check-permissions')
+def check_orphaned_permissions():
+    """Check write permissions for all configured instance mapped directories."""
+    instances = Instance.query.filter(Instance.mapped_download_dir.isnot(None)).all()
+    results = {}
+    
+    for instance in instances:
+        mapped_dir = instance.mapped_download_dir
+        if not mapped_dir:
+            continue
+            
+        test_file = os.path.join(mapped_dir, '.qpanel_permission_test')
+        try:
+            # Try to create and delete a test file
+            with open(test_file, 'w') as f:
+                f.write('')
+            os.remove(test_file)
+            results[instance.id] = {'status': 'ok', 'name': instance.name, 'path': mapped_dir}
+        except PermissionError:
+            results[instance.id] = {'status': 'error', 'name': instance.name, 'path': mapped_dir, 'error': 'Permission denied'}
+        except Exception as e:
+            results[instance.id] = {'status': 'error', 'name': instance.name, 'path': mapped_dir, 'error': str(e)}
+    
+    return jsonify(results)
+
+@app.route('/api/orphaned-files/delete-file/<int:file_id>', methods=['POST'])
+def delete_orphaned_file_from_disk(file_id):
+    """Delete an orphaned file from disk and remove from database."""
+    orphaned_file = OrphanedFile.query.get_or_404(file_id)
+    instance = orphaned_file.instance
+    
+    # Convert qBt path to local mapped path
+    file_path = orphaned_file.file_path
+    if instance.qbt_download_dir and instance.mapped_download_dir:
+        if file_path.startswith(instance.qbt_download_dir):
+            file_path = file_path.replace(instance.qbt_download_dir, instance.mapped_download_dir, 1)
+    
+    errors = []
+    deleted_path = orphaned_file.file_path
+    
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        # Remove from database
+        db.session.delete(orphaned_file)
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': f'Deleted: {deleted_path}'})
+    except PermissionError:
+        return jsonify({'status': 'error', 'message': f'Permission denied: {deleted_path}'}), 403
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Error deleting {deleted_path}: {str(e)}'}), 500
+
+@app.route('/api/orphaned-files/delete-folder', methods=['POST'])
+def delete_orphaned_folder():
+    """Delete all orphaned files in a folder from disk and remove from database."""
+    data = request.get_json()
+    file_ids = data.get('file_ids', [])
+    
+    if not file_ids:
+        return jsonify({'status': 'error', 'message': 'No files specified'}), 400
+    
+    results = {'deleted': [], 'errors': []}
+    
+    for file_id in file_ids:
+        orphaned_file = OrphanedFile.query.get(file_id)
+        if not orphaned_file:
+            results['errors'].append({'id': file_id, 'error': 'File not found in database'})
+            continue
+            
+        instance = orphaned_file.instance
+        file_path = orphaned_file.file_path
+        
+        # Convert qBt path to local mapped path
+        if instance.qbt_download_dir and instance.mapped_download_dir:
+            if file_path.startswith(instance.qbt_download_dir):
+                file_path = file_path.replace(instance.qbt_download_dir, instance.mapped_download_dir, 1)
+        
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            db.session.delete(orphaned_file)
+            results['deleted'].append(orphaned_file.file_path)
+        except PermissionError:
+            results['errors'].append({'path': orphaned_file.file_path, 'error': 'Permission denied'})
+        except Exception as e:
+            results['errors'].append({'path': orphaned_file.file_path, 'error': str(e)})
+    
+    # Try to remove the parent directory if it's empty
+    if results['deleted'] and not results['errors']:
+        try:
+            # Get the common directory from the first deleted file
+            first_deleted = results['deleted'][0]
+            instance = Instance.query.get(data.get('instance_id'))
+            if instance and instance.qbt_download_dir and instance.mapped_download_dir:
+                dir_path = data.get('directory', '')
+                if dir_path.startswith(instance.qbt_download_dir):
+                    local_dir = dir_path.replace(instance.qbt_download_dir, instance.mapped_download_dir, 1)
+                    # Try to remove empty directories up to the mapped root
+                    while local_dir != instance.mapped_download_dir and local_dir != '/':
+                        if os.path.isdir(local_dir) and not os.listdir(local_dir):
+                            os.rmdir(local_dir)
+                            local_dir = os.path.dirname(local_dir)
+                        else:
+                            break
+        except Exception:
+            pass  # Ignore errors when cleaning up empty directories
+    
+    db.session.commit()
+    
+    if results['errors']:
+        return jsonify({
+            'status': 'partial',
+            'message': f"Deleted {len(results['deleted'])} files, {len(results['errors'])} errors",
+            'deleted': results['deleted'],
+            'errors': results['errors']
+        }), 207
+    
+    return jsonify({
+        'status': 'success',
+        'message': f"Deleted {len(results['deleted'])} files",
+        'deleted': results['deleted']
+    })
 
 @app.route('/orphaned-files/settings/<instance_id>', methods=['POST'])
 def update_orphaned_settings(instance_id):

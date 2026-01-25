@@ -14,6 +14,14 @@
     <h2 class="mb-4">Orphaned Files</h2>
     <p class="text-muted">Manage orphaned file detection per qBittorrent instance. Orphaned files are files on disk that are not associated with any torrent.</p>
 
+    <!-- Permission Warning -->
+    <div id="permission-warning" class="alert alert-warning d-none mb-4">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Write Permission Issues Detected:</strong>
+        <div id="permission-details" class="mt-2"></div>
+        <small class="text-muted d-block mt-2">File deletion will not work until permissions are fixed.</small>
+    </div>
+
     <!-- Instance Settings -->
     <div class="row mb-4">
         {% for instance in instances %}
@@ -89,62 +97,159 @@
     </div>
 
     {% if orphaned_files %}
-    <div class="card">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Instance</th>
-                        <th>File Path</th>
-                        <th>Size</th>
-                        <th>Modified</th>
-                        <th>Detected</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for file in orphaned_files %}
-                    <tr>
-                        <td><span class="badge bg-primary">{{ file.instance.name }}</span></td>
-                        <td>
-                            <code class="small" style="word-break: break-all;">{{ file.file_path }}</code>
-                        </td>
-                        <td>
-                            {% if file.file_size %}
-                            {{ (file.file_size / 1024 / 1024) | round(2) }} MB
-                            {% else %}
-                            —
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if file.file_mtime %}
-                            {{ file.file_mtime.strftime('%Y-%m-%d %H:%M') }}
-                            {% else %}
-                            —
-                            {% endif %}
-                        </td>
-                        <td>{{ file.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
-                        <td class="text-end">
-                            <form method="post" action="{{ url_for('delete_orphaned_file', file_id=file.id) }}" style="display: inline;">
-                                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Remove from list">
-                                    <i class="bi bi-x-lg"></i>
+    {% for instance_id, data in grouped_files.items() %}
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <span class="badge bg-primary me-2">{{ data.instance.name }}</span>
+                <span class="text-muted small">{{ data.groups|length }} groups, {{ data.ungrouped|length }} ungrouped files</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <!-- Grouped Files -->
+            {% for group in data.groups %}
+            <div class="orphaned-group border-bottom" data-instance-id="{{ instance_id }}" data-directory="{{ group.directory }}" data-file-ids="{{ group.files | map(attribute='id') | list | tojson }}">
+                <div class="group-header d-flex align-items-center px-3 py-2" style="background-color: var(--muted);">
+                    <div class="group-toggle d-flex align-items-center flex-grow-1" style="cursor: pointer;" onclick="toggleGroup(this)">
+                        <i class="bi bi-chevron-down me-2 group-chevron"></i>
+                        <i class="bi bi-folder-fill me-2" style="color: var(--chart-warning);"></i>
+                        <code class="me-auto" style="word-break: break-all;">{{ group.directory }}</code>
+                    </div>
+                    <span class="badge bg-secondary me-2">{{ group.files|length }} files</span>
+                    <span class="text-muted small me-3">{{ (group.total_size / 1024 / 1024) | round(2) }} MB</span>
+                    <button type="button" class="btn btn-outline-danger btn-sm me-1" title="Delete folder from disk" onclick="deleteFolderFromDisk(this)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+                <div class="group-files">
+                    <table class="table table-hover align-middle mb-0">
+                        <tbody>
+                            {% for file in group.files %}
+                            <tr data-file-id="{{ file.id }}">
+                                <td style="padding-left: 2.5rem;">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-file-earmark me-2 text-muted"></i>
+                                        <code class="small" style="word-break: break-all;">{{ file.file_path[group.directory|length:] }}</code>
+                                    </div>
+                                </td>
+                                <td style="width: 100px;">
+                                    {% if file.file_size %}
+                                    {{ (file.file_size / 1024 / 1024) | round(2) }} MB
+                                    {% else %}
+                                    —
+                                    {% endif %}
+                                </td>
+                                <td style="width: 140px;">
+                                    {% if file.file_mtime %}
+                                    {{ file.file_mtime.strftime('%Y-%m-%d %H:%M') }}
+                                    {% else %}
+                                    —
+                                    {% endif %}
+                                </td>
+                                <td style="width: 140px;">{{ file.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td class="text-end" style="width: 100px;">
+                                    <button type="button" class="btn btn-outline-danger btn-sm me-1" title="Delete from disk" onclick="deleteFileFromDisk({{ file.id }}, this)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                    <form method="post" action="{{ url_for('delete_orphaned_file', file_id=file.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm" title="Remove from list only">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+
+            <!-- Ungrouped Files -->
+            {% if data.ungrouped %}
+            <div class="orphaned-ungrouped">
+                {% if data.groups %}
+                <div class="px-3 py-2" style="background-color: var(--muted);">
+                    <span class="text-muted small"><i class="bi bi-file-earmark me-1"></i> Ungrouped files</span>
+                </div>
+                {% endif %}
+                <table class="table table-hover align-middle mb-0">
+                    <thead {% if not data.groups %}{% else %}class="d-none"{% endif %}>
+                        <tr>
+                            <th>File Path</th>
+                            <th style="width: 100px;">Size</th>
+                            <th style="width: 140px;">Modified</th>
+                            <th style="width: 140px;">Detected</th>
+                            <th class="text-end" style="width: 100px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file in data.ungrouped %}
+                        <tr data-file-id="{{ file.id }}">
+                            <td>
+                                <code class="small" style="word-break: break-all;">{{ file.file_path }}</code>
+                            </td>
+                            <td>
+                                {% if file.file_size %}
+                                {{ (file.file_size / 1024 / 1024) | round(2) }} MB
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if file.file_mtime %}
+                                {{ file.file_mtime.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                            <td>{{ file.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-outline-danger btn-sm me-1" title="Delete from disk" onclick="deleteFileFromDisk({{ file.id }}, this)">
+                                    <i class="bi bi-trash"></i>
                                 </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                                <form method="post" action="{{ url_for('delete_orphaned_file', file_id=file.id) }}" style="display: inline;">
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Remove from list only">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
         </div>
     </div>
+    {% endfor %}
     {% else %}
     <div class="alert alert-secondary">
         <i class="bi bi-check-circle"></i> No orphaned files detected. Files will appear here after the next scheduled scan.
     </div>
     {% endif %}
 
+    <style>
+        .orphaned-group .group-header:hover {
+            background-color: var(--accent) !important;
+        }
+        .orphaned-group .group-chevron {
+            transition: transform 0.2s ease;
+        }
+        .orphaned-group.collapsed .group-chevron {
+            transform: rotate(-90deg);
+        }
+        .orphaned-group.collapsed .group-files {
+            display: none;
+        }
+        .orphaned-group .group-files tr:last-child td {
+            border-bottom: none;
+        }
+    </style>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Toggle orphan settings visibility
             document.querySelectorAll('.orphan-toggle').forEach(function(toggle) {
                 toggle.addEventListener('change', function() {
                     const instanceId = this.id.split('_').pop();
@@ -152,6 +257,208 @@
                     settingsDiv.style.display = this.checked ? 'block' : 'none';
                 });
             });
+
+            // Check permissions on page load
+            checkPermissions();
         });
+
+        function toggleGroup(element) {
+            const group = element.closest('.orphaned-group');
+            group.classList.toggle('collapsed');
+        }
+
+        function checkPermissions() {
+            fetch('/api/orphaned-files/check-permissions')
+                .then(response => response.json())
+                .then(data => {
+                    const warningDiv = document.getElementById('permission-warning');
+                    const detailsDiv = document.getElementById('permission-details');
+                    const errors = [];
+
+                    for (const [instanceId, result] of Object.entries(data)) {
+                        if (result.status === 'error') {
+                            errors.push(`<code>${result.name}</code>: ${result.path} — ${result.error}`);
+                        }
+                    }
+
+                    if (errors.length > 0) {
+                        detailsDiv.innerHTML = errors.map(e => `<div>• ${e}</div>`).join('');
+                        warningDiv.classList.remove('d-none');
+                    } else {
+                        warningDiv.classList.add('d-none');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking permissions:', error);
+                });
+        }
+
+        function deleteFileFromDisk(fileId, buttonElement) {
+            if (!confirm('Are you sure you want to permanently delete this file from disk?')) {
+                return;
+            }
+
+            const originalContent = buttonElement.innerHTML;
+            buttonElement.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            buttonElement.disabled = true;
+
+            fetch(`/api/orphaned-files/delete-file/${fileId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json().then(data => ({ status: response.status, data })))
+            .then(({ status, data }) => {
+                if (data.status === 'success') {
+                    // Remove the row from the table
+                    const row = buttonElement.closest('tr');
+                    row.style.transition = 'opacity 0.3s';
+                    row.style.opacity = '0';
+                    setTimeout(() => {
+                        row.remove();
+                        updateGroupCounts();
+                    }, 300);
+                    showToast('success', data.message);
+                } else {
+                    showToast('danger', data.message);
+                    buttonElement.innerHTML = originalContent;
+                    buttonElement.disabled = false;
+                }
+            })
+            .catch(error => {
+                showToast('danger', 'Network error: ' + error.message);
+                buttonElement.innerHTML = originalContent;
+                buttonElement.disabled = false;
+            });
+        }
+
+        function deleteFolderFromDisk(buttonElement) {
+            const group = buttonElement.closest('.orphaned-group');
+            const fileIds = JSON.parse(group.dataset.fileIds);
+            const directory = group.dataset.directory;
+            const instanceId = group.dataset.instanceId;
+
+            if (!confirm(`Are you sure you want to permanently delete all ${fileIds.length} files in this folder from disk?\n\n${directory}`)) {
+                return;
+            }
+
+            const originalContent = buttonElement.innerHTML;
+            buttonElement.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            buttonElement.disabled = true;
+
+            fetch('/api/orphaned-files/delete-folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    file_ids: fileIds,
+                    directory: directory,
+                    instance_id: instanceId
+                })
+            })
+            .then(response => response.json().then(data => ({ status: response.status, data })))
+            .then(({ status, data }) => {
+                if (data.status === 'success') {
+                    // Remove the entire group
+                    group.style.transition = 'opacity 0.3s';
+                    group.style.opacity = '0';
+                    setTimeout(() => {
+                        group.remove();
+                        updateGroupCounts();
+                    }, 300);
+                    showToast('success', data.message);
+                } else if (data.status === 'partial') {
+                    // Some files deleted, some errors
+                    showToast('warning', data.message);
+                    // Remove successfully deleted rows
+                    if (data.deleted) {
+                        data.deleted.forEach(path => {
+                            const rows = group.querySelectorAll('tr');
+                            rows.forEach(row => {
+                                if (row.querySelector('code')?.textContent.includes(path.split('/').pop())) {
+                                    row.remove();
+                                }
+                            });
+                        });
+                    }
+                    // Show error details
+                    if (data.errors && data.errors.length > 0) {
+                        const errorMsgs = data.errors.map(e => e.error || e.path).join(', ');
+                        showToast('danger', 'Errors: ' + errorMsgs);
+                    }
+                    buttonElement.innerHTML = originalContent;
+                    buttonElement.disabled = false;
+                    updateGroupCounts();
+                } else {
+                    showToast('danger', data.message);
+                    buttonElement.innerHTML = originalContent;
+                    buttonElement.disabled = false;
+                }
+            })
+            .catch(error => {
+                showToast('danger', 'Network error: ' + error.message);
+                buttonElement.innerHTML = originalContent;
+                buttonElement.disabled = false;
+            });
+        }
+
+        function updateGroupCounts() {
+            // Update file counts in group headers
+            document.querySelectorAll('.orphaned-group').forEach(group => {
+                const fileCount = group.querySelectorAll('tbody tr').length;
+                const badge = group.querySelector('.badge.bg-secondary');
+                if (badge) {
+                    badge.textContent = `${fileCount} files`;
+                }
+                // Remove empty groups
+                if (fileCount === 0) {
+                    group.remove();
+                }
+            });
+
+            // Update instance card counts
+            document.querySelectorAll('.card.mb-4').forEach(card => {
+                const groups = card.querySelectorAll('.orphaned-group').length;
+                const ungrouped = card.querySelectorAll('.orphaned-ungrouped tbody tr').length;
+                const countSpan = card.querySelector('.card-header .text-muted.small');
+                if (countSpan) {
+                    countSpan.textContent = `${groups} groups, ${ungrouped} ungrouped files`;
+                }
+            });
+        }
+
+        function showToast(type, message) {
+            // Create a simple toast notification
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} position-fixed`;
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px; animation: fadeIn 0.3s';
+            toast.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'x-circle'} me-2"></i>
+                    <span>${message}</span>
+                    <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+                </div>
+            `;
+            document.body.appendChild(toast);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
     </script>
+
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+    </style>
 {% endblock %}

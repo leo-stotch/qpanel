@@ -101,10 +101,10 @@
                     <thead>
                         <tr>
                             <th style="width: 15%;">Name</th>
-                            <th style="width: 25%;">Assigned To</th>
-                            <th style="width: 25%;">Condition</th>
-                            <th>Limits</th>
-                            <th style="width: 15%;" class="text-end">Actions</th>
+                            <th style="width: 10%;">Assigned To</th>
+                            <th style="width: 35%; max-width: 300px;">Condition</th>
+                            <th style="width: 20%;">Limits</th>
+                            <th style="width: 10%;" class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -120,7 +120,7 @@
                                     <span class="text-muted">Not assigned</span>
                                 {% endif %}
                             </td>
-                            <td>If <strong>{{ rule.condition_type }}</strong> is <code>{{ rule.condition_value }}</code></td>
+                            <td style="max-width: 300px;">If <strong>{{ rule.condition_type }}</strong> is <code style="word-break: break-all; white-space: normal; display: inline-block;">{{ rule.condition_value }}</code></td>
                             <td>
                                 {% if rule.share_limit_ratio is not none %}<span class="badge bg-primary fw-normal me-1">Ratio: {{ rule.share_limit_ratio }}</span>{% endif %}
                                 {% if rule.share_limit_time is not none %}<span class="badge bg-primary fw-normal me-1">Time: {{ rule.share_limit_time }}m</span>{% endif %}

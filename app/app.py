@@ -751,18 +751,13 @@ if __name__ == '__main__':
         db.create_all()
     
     settings = load_settings()
-    from scheduler import apply_rules_job, tag_unregistered_torrents_job, tag_torrents_with_no_hard_links_job, detect_orphaned_files_job
-    from cross_seed_checker import pause_cross_seeded_torrents_job
+    from scheduler import run_all_jobs
     scheduler = BackgroundScheduler()
 
     interval_minutes = settings.get('scheduler_interval_minutes', 10)
     
-    # Stagger the jobs
-    scheduler.add_job(func=tag_unregistered_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now())
-    scheduler.add_job(func=tag_torrents_with_no_hard_links_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=1))
-    scheduler.add_job(func=apply_rules_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=2))
-    scheduler.add_job(func=pause_cross_seeded_torrents_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=3))
-    scheduler.add_job(func=detect_orphaned_files_job, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now() + timedelta(minutes=4))
+    # Single unified job that fetches torrents once and runs all tasks
+    scheduler.add_job(func=run_all_jobs, trigger="interval", minutes=interval_minutes, next_run_time=datetime.now())
     
     scheduler.start()
 

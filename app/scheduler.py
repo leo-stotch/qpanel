@@ -8,18 +8,131 @@ import os
 from notifications import send_notification
 from app import TelegramMessage
 from datetime import datetime, timedelta
-from typing import Optional, Set, List, Tuple
+from typing import Optional, Set, List, Tuple, Dict, Any
 import re
+import gc
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def run_all_jobs():
+    """
+    Unified scheduler job that fetches torrents ONCE per instance and runs all tasks.
+    This significantly reduces memory usage by avoiding redundant API calls.
+    """
+    from cross_seed_checker import pause_cross_seeded_torrents_for_instance
+    
+    with app.app_context():
+        logger.info("=== Starting unified scheduler cycle ===")
+        
+        all_instances = Instance.query.all()
+        
+        # Cache for torrent data: {instance_id: {'client': client, 'torrents': torrents}}
+        instance_cache: Dict[int, Dict[str, Any]] = {}
+        
+        # Phase 1: Fetch all torrent data once per instance
+        logger.info("Phase 1: Fetching torrent data from all instances...")
+        for instance in all_instances:
+            try:
+                client = get_client(instance)
+                if client:
+                    torrents = get_all_torrents(client)
+                    instance_cache[instance.id] = {
+                        'client': client,
+                        'torrents': torrents,
+                        'instance': instance
+                    }
+                    logger.info(f"Fetched {len(torrents)} torrents from '{instance.name}'")
+                else:
+                    logger.warning(f"Could not connect to instance '{instance.name}'")
+            except Exception as e:
+                logger.error(f"Error fetching torrents from '{instance.name}': {e}")
+        
+        # Phase 2: Run tag_unregistered_torrents
+        logger.info("Phase 2: Checking for unregistered torrents...")
+        for instance in Instance.query.filter_by(tag_unregistered_torrents=True).all():
+            if instance.id in instance_cache:
+                try:
+                    cache = instance_cache[instance.id]
+                    tag_unregistered_torrents_for_instance(
+                        cache['instance'], 
+                        cache['client'], 
+                        cache['torrents']
+                    )
+                    db.session.commit()
+                except Exception as e:
+                    logger.error(f"Error in tag_unregistered_torrents for '{instance.name}': {e}")
+                    db.session.rollback()
+        
+        # Phase 3: Run tag_torrents_with_no_hard_links
+        logger.info("Phase 3: Checking for torrents with no hard links...")
+        for instance in Instance.query.filter_by(tag_nohardlinks=True).all():
+            if instance.id in instance_cache:
+                try:
+                    cache = instance_cache[instance.id]
+                    tag_torrents_with_no_hard_links(
+                        cache['instance'], 
+                        cache['client'], 
+                        cache['torrents']
+                    )
+                    db.session.commit()
+                except Exception as e:
+                    logger.error(f"Error in tag_torrents_with_no_hard_links for '{instance.name}': {e}")
+                    db.session.rollback()
+        
+        # Phase 4: Apply rules
+        logger.info("Phase 4: Applying rules...")
+        for instance in all_instances:
+            if instance.id in instance_cache:
+                try:
+                    cache = instance_cache[instance.id]
+                    apply_rules_for_instance(
+                        cache['instance'], 
+                        cache['client'], 
+                        cache['torrents']
+                    )
+                    db.session.commit()
+                except Exception as e:
+                    logger.error(f"Error in apply_rules for '{instance.name}': {e}")
+                    db.session.rollback()
+        
+        # Phase 5: Pause cross-seeded torrents
+        logger.info("Phase 5: Checking for cross-seeded torrents...")
+        for instance in Instance.query.filter_by(pause_cross_seeded_torrents=True).all():
+            if instance.id in instance_cache:
+                try:
+                    cache = instance_cache[instance.id]
+                    pause_cross_seeded_torrents_for_instance(
+                        cache['instance'], 
+                        cache['client'],
+                        cache['torrents']
+                    )
+                except Exception as e:
+                    logger.error(f"Error in pause_cross_seeded_torrents for '{instance.name}': {e}")
+        
+        # Phase 6: Detect orphaned files (uses cached torrent data)
+        logger.info("Phase 6: Detecting orphaned files...")
+        try:
+            detect_orphaned_files_job_optimized(instance_cache)
+        except Exception as e:
+            logger.error(f"Error in detect_orphaned_files: {e}")
+            db.session.rollback()
+        
+        # Cleanup: Clear cache and force garbage collection
+        logger.info("Cleanup: Releasing memory...")
+        instance_cache.clear()
+        gc.collect()
+        
+        logger.info("=== Unified scheduler cycle complete ===")
+
 
 def apply_rules_for_instance(instance, client, torrents):
     """
     Applies rules to a single instance.
     """
-    logging.info(f"Checking rules for instance: {instance.name}")
-    logger.info(f"Found {len(torrents)} torrents in '{instance.name}'.")
+    logger.info(f"Checking rules for instance: {instance.name}")
+    logger.debug(f"Found {len(torrents)} torrents in '{instance.name}'.")
 
     for torrent in torrents:
         for rule in instance.rules:
@@ -58,7 +171,7 @@ def apply_rules_for_instance(instance, client, torrents):
                     is_already_applied = False
 
                 if is_already_applied:
-                    logger.info(f"Torrent '{torrent.name}' already conforms to rule '{rule.name}'. Skipping.")
+                    logger.debug(f"Torrent '{torrent.name}' already conforms to rule '{rule.name}'. Skipping.")
                 else:
                     logger.info(f"Torrent '{torrent.name}' matched rule '{rule.name}'. Applying limits.")
 
@@ -125,7 +238,7 @@ def tag_torrents_with_no_hard_links(instance, client, torrents):
                             has_hard_link = True
                             break  # A single hard-linked file is enough
                     except FileNotFoundError:
-                        logger.warning(f"File not found: {mapped_path}. Skipping hard link check for this file.")
+                        logger.debug(f"File not found: {mapped_path}. Skipping hard link check for this file.")
 
             # Robustly check for and manage the 'noHL' tag
             current_tags = [t.strip() for t in torrent.tags.split(',') if t.strip()]
@@ -233,50 +346,24 @@ def tag_unregistered_torrents_for_instance(instance, client, torrents):
                 log_entry = ActionLog(instance_id=instance.id, action=f"Removed 'unregistered' tag from '{torrent.name}'", details="Tracker status is now normal. Share limits reset to global settings.")
                 db.session.add(log_entry)
 
+
+# Legacy job functions kept for backwards compatibility (can be removed later)
 def apply_rules_job():
-    """Scheduled job to apply all defined rules to all instances."""
-    from app import app
-    with app.app_context():
-        instances = Instance.query.all()
-        for instance in instances:
-            try:
-                client = get_client(instance)
-                torrents = get_all_torrents(client)
-                apply_rules_for_instance(instance, client, torrents)
-                db.session.commit()
-            except Exception as e:
-                logging.error(f"An unexpected error occurred in apply_rules_job for instance '{instance.name}': {e}")
-                db.session.rollback()
+    """Legacy: Scheduled job to apply all defined rules to all instances."""
+    run_all_jobs()
 
 def tag_unregistered_torrents_job():
-    """Scheduled job to tag unregistered torrents."""
-    from app import app
-    with app.app_context():
-        instances = Instance.query.filter_by(tag_unregistered_torrents=True).all()
-        for instance in instances:
-            try:
-                client = get_client(instance)
-                torrents = get_all_torrents(client)
-                tag_unregistered_torrents_for_instance(instance, client, torrents)
-                db.session.commit()
-            except Exception as e:
-                logging.error(f"An unexpected error occurred in tag_unregistered_torrents_job for instance '{instance.name}': {e}")
-                db.session.rollback()
+    """Legacy: Scheduled job to tag unregistered torrents."""
+    run_all_jobs()
 
 def tag_torrents_with_no_hard_links_job():
-    """Scheduled job to tag torrents with no hard links."""
-    from app import app
-    with app.app_context():
-        instances = Instance.query.filter_by(tag_nohardlinks=True).all()
-        for instance in instances:
-            try:
-                client = get_client(instance)
-                torrents = get_all_torrents(client)
-                tag_torrents_with_no_hard_links(instance, client, torrents)
-                db.session.commit()
-            except Exception as e:
-                logging.error(f"An unexpected error occurred in tag_torrents_with_no_hard_links_job for instance '{instance.name}': {e}")
-                db.session.rollback()
+    """Legacy: Scheduled job to tag torrents with no hard links."""
+    run_all_jobs()
+
+def detect_orphaned_files_job():
+    """Legacy: Scheduled job to detect orphaned files."""
+    run_all_jobs()
+
 
 def _map_qbt_path_to_local(instance: Instance, qbt_path: str) -> Optional[str]:
     """Translate a qBittorrent-visible path to the local filesystem path using the instance mapping.
@@ -297,23 +384,20 @@ def _map_qbt_path_to_local(instance: Instance, qbt_path: str) -> Optional[str]:
     except Exception:
         return None
 
-def _collect_expected_local_paths(instance: Instance, client, group_mapped_root: Optional[str] = None) -> Set[str]:
-    """Build a set of expected file paths on the local filesystem for the given instance.
-
-    If mapping fails, but the qBittorrent-visible path is already under the group's mapped root,
-    include it as-is (realpathed). This helps when multiple services share the exact same mount path.
+def _collect_expected_local_paths_from_cache(instance: Instance, client, torrents, group_mapped_root: Optional[str] = None) -> Set[str]:
+    """Build a set of expected file paths using pre-fetched torrent data.
+    
+    This is the optimized version that doesn't re-fetch torrents.
     """
     expected: Set[str] = set()
-    torrents = get_all_torrents(client)
     group_root_real = os.path.realpath(os.path.normpath(group_mapped_root)) if group_mapped_root else None
-    logger.info(f"Collecting expected paths for instance '{instance.name}' (qbt_dir: {instance.qbt_download_dir}, mapped_dir: {instance.mapped_download_dir})")
-    logger.info(f"Retrieved {len(torrents)} torrents from instance '{instance.name}'")
+    logger.debug(f"Collecting expected paths for instance '{instance.name}' (qbt_dir: {instance.qbt_download_dir}, mapped_dir: {instance.mapped_download_dir})")
+    logger.debug(f"Processing {len(torrents)} torrents from instance '{instance.name}'")
     
     for torrent in torrents:
         try:
             files = client.torrents_files(torrent_hash=torrent.hash)
             torrent_save_path = torrent.save_path
-            logger.info(f"Processing torrent '{torrent.name}' with save_path: {torrent_save_path}")
             
             for f in files:
                 qbt_full_path = os.path.join(torrent_save_path, f.name)
@@ -321,7 +405,6 @@ def _collect_expected_local_paths(instance: Instance, client, group_mapped_root:
                 if local_path:
                     real_local = os.path.realpath(local_path)
                     expected.add(real_local)
-                    logger.info(f"Mapped {qbt_full_path} -> {real_local}")
                     continue
                     
                 # Fallback: if qbt path is already under the group mapped root, accept it
@@ -330,14 +413,12 @@ def _collect_expected_local_paths(instance: Instance, client, group_mapped_root:
                     try:
                         if os.path.commonpath([qbt_real, group_root_real]) == group_root_real:
                             expected.add(qbt_real)
-                            logger.info(f"Direct path accepted: {qbt_real}")
                     except Exception:
                         pass
                 else:
                     # No group root, but maybe qbt path is directly usable
                     qbt_real = os.path.realpath(os.path.normpath(qbt_full_path))
                     expected.add(qbt_real)
-                    logger.info(f"Direct qbt path added: {qbt_real}")
         except Exception as e:
             logger.warning(f"Error processing torrent {torrent.name}: {e}")
             continue
@@ -396,102 +477,107 @@ def _find_orphaned_files(mapped_root: str, expected_paths: Set[str], expected_in
                 continue
     return orphans
 
-def detect_orphaned_files_job():
-    """Scheduled job to detect orphaned files for instances with orphan scanning enabled.
-
-    Collects expected files from ALL instances globally, then scans each unique mapped directory
-    to avoid false positives when files are managed by different instances.
-    Stores detected orphaned files in the database for display on the Orphaned Files page.
+def detect_orphaned_files_job_optimized(instance_cache: Dict[int, Dict[str, Any]]):
+    """Optimized orphaned files detection using pre-fetched torrent data.
+    
+    This version uses the instance_cache from run_all_jobs() instead of re-fetching torrents.
     """
-    with app.app_context():
-        # Get instances with orphan scanning enabled and path mappings configured
-        scan_enabled_instances = [
-            i for i in Instance.query.filter_by(orphaned_scan_enabled=True).all()
-            if i.qbt_download_dir and i.mapped_download_dir
-        ]
-        
-        if not scan_enabled_instances:
-            logger.info("No instances with orphan scanning enabled")
-            return
+    # Get instances with orphan scanning enabled and path mappings configured
+    scan_enabled_instances = [
+        i for i in Instance.query.filter_by(orphaned_scan_enabled=True).all()
+        if i.qbt_download_dir and i.mapped_download_dir
+    ]
+    
+    if not scan_enabled_instances:
+        logger.info("No instances with orphan scanning enabled")
+        return
 
-        # Get ALL instances with path mappings for building expected paths
-        all_mapped_instances = [
-            i for i in Instance.query.all()
-            if i.qbt_download_dir and i.mapped_download_dir
-        ]
+    # Get ALL instances with path mappings for building expected paths
+    all_mapped_instances = [
+        i for i in Instance.query.all()
+        if i.qbt_download_dir and i.mapped_download_dir
+    ]
 
-        # Collect ALL expected files from ALL instances globally
-        global_expected_paths: Set[str] = set()
-        for inst in all_mapped_instances:
-            client = get_client(inst)
-            if not client:
-                logger.warning(f"Could not connect to instance '{inst.name}'")
-                continue
-            try:
-                inst_paths = _collect_expected_local_paths(inst, client)
-                global_expected_paths |= inst_paths
-                logger.info(f"Added {len(inst_paths)} paths from instance '{inst.name}'")
-            except Exception as e:
-                logger.error(f"Error collecting paths from instance '{inst.name}': {e}")
-                continue
+    # Collect ALL expected files from ALL instances using cached data
+    global_expected_paths: Set[str] = set()
+    for inst in all_mapped_instances:
+        if inst.id not in instance_cache:
+            logger.warning(f"No cached data for instance '{inst.name}'")
+            continue
+        try:
+            cache = instance_cache[inst.id]
+            inst_paths = _collect_expected_local_paths_from_cache(
+                cache['instance'], 
+                cache['client'], 
+                cache['torrents']
+            )
+            global_expected_paths |= inst_paths
+        except Exception as e:
+            logger.error(f"Error collecting paths from instance '{inst.name}': {e}")
+            continue
 
-        logger.info(f"Total global expected paths: {len(global_expected_paths)}")
-        if not global_expected_paths:
-            logger.warning("No expected paths found across all instances")
-            return
+    logger.info(f"Total global expected paths: {len(global_expected_paths)}")
+    if not global_expected_paths:
+        logger.warning("No expected paths found across all instances")
+        return
 
-        global_expected_inodes = _collect_inodes(global_expected_paths)
-        logger.info(f"Total global expected inodes: {len(global_expected_inodes)}")
+    global_expected_inodes = _collect_inodes(global_expected_paths)
+    logger.info(f"Total global expected inodes: {len(global_expected_inodes)}")
 
-        # Process each instance with orphan scanning enabled
-        for instance in scan_enabled_instances:
-            try:
-                min_age_days = instance.orphaned_min_age_days or 7
-                ignore_patterns_raw = instance.orphaned_ignore_patterns or ''
-                ignore_patterns = [p.strip() for p in ignore_patterns_raw.splitlines() if p.strip()]
+    # Process each instance with orphan scanning enabled
+    for instance in scan_enabled_instances:
+        try:
+            min_age_days = instance.orphaned_min_age_days or 7
+            ignore_patterns_raw = instance.orphaned_ignore_patterns or ''
+            ignore_patterns = [p.strip() for p in ignore_patterns_raw.splitlines() if p.strip()]
+            
+            mapped_root = os.path.realpath(os.path.normpath(instance.mapped_download_dir))
+            logger.info(f"Scanning mapped root '{mapped_root}' for orphans (instance: {instance.name})")
+            
+            orphaned = _find_orphaned_files(mapped_root, global_expected_paths, global_expected_inodes, min_age_days, ignore_patterns)
+            logger.info(f"Found {len(orphaned)} orphaned files for instance '{instance.name}'")
+            
+            if orphaned:
+                # Get existing orphaned file paths for this instance to avoid duplicates
+                existing_paths = {
+                    of.file_path for of in OrphanedFile.query.filter_by(instance_id=instance.id).all()
+                }
                 
-                mapped_root = os.path.realpath(os.path.normpath(instance.mapped_download_dir))
-                logger.info(f"Scanning mapped root '{mapped_root}' for orphans (instance: {instance.name})")
+                new_orphans = [o for o in orphaned if o not in existing_paths]
+                logger.info(f"Found {len(new_orphans)} NEW orphaned files for instance '{instance.name}'")
                 
-                orphaned = _find_orphaned_files(mapped_root, global_expected_paths, global_expected_inodes, min_age_days, ignore_patterns)
-                logger.info(f"Found {len(orphaned)} orphaned files for instance '{instance.name}'")
-                
-                if orphaned:
-                    # Get existing orphaned file paths for this instance to avoid duplicates
-                    existing_paths = {
-                        of.file_path for of in OrphanedFile.query.filter_by(instance_id=instance.id).all()
-                    }
+                for orphan_path in new_orphans:
+                    try:
+                        stat = os.stat(orphan_path)
+                        file_size = stat.st_size
+                        file_mtime = datetime.fromtimestamp(stat.st_mtime)
+                    except (FileNotFoundError, PermissionError):
+                        file_size = None
+                        file_mtime = None
                     
-                    new_orphans = [o for o in orphaned if o not in existing_paths]
-                    logger.info(f"Found {len(new_orphans)} NEW orphaned files for instance '{instance.name}'")
-                    
-                    for orphan_path in new_orphans:
-                        try:
-                            stat = os.stat(orphan_path)
-                            file_size = stat.st_size
-                            file_mtime = datetime.fromtimestamp(stat.st_mtime)
-                        except (FileNotFoundError, PermissionError):
-                            file_size = None
-                            file_mtime = None
-                        
-                        db.session.add(OrphanedFile(
-                            instance_id=instance.id,
-                            file_path=orphan_path,
-                            file_size=file_size,
-                            file_mtime=file_mtime
-                        ))
-                    
-                    if new_orphans:
-                        db.session.commit()
-                        logger.info(f"Saved {len(new_orphans)} new orphaned files for instance '{instance.name}'")
+                    db.session.add(OrphanedFile(
+                        instance_id=instance.id,
+                        file_path=orphan_path,
+                        file_size=file_size,
+                        file_mtime=file_mtime
+                    ))
                 
-                # Clean up entries for files that no longer exist or are no longer orphaned
-                existing_entries = OrphanedFile.query.filter_by(instance_id=instance.id).all()
-                for entry in existing_entries:
-                    if not os.path.exists(entry.file_path) or entry.file_path in global_expected_paths:
-                        db.session.delete(entry)
-                db.session.commit()
-                
-            except Exception as e:
-                logging.error(f"An unexpected error occurred in detect_orphaned_files_job for instance '{instance.name}': {e}")
-                db.session.rollback()
+                if new_orphans:
+                    db.session.commit()
+                    logger.info(f"Saved {len(new_orphans)} new orphaned files for instance '{instance.name}'")
+            
+            # Clean up entries for files that no longer exist or are no longer orphaned
+            existing_entries = OrphanedFile.query.filter_by(instance_id=instance.id).all()
+            for entry in existing_entries:
+                if not os.path.exists(entry.file_path) or entry.file_path in global_expected_paths:
+                    db.session.delete(entry)
+            db.session.commit()
+            
+        except Exception as e:
+            logging.error(f"An unexpected error occurred in detect_orphaned_files_job for instance '{instance.name}': {e}")
+            db.session.rollback()
+    
+    # Force garbage collection after processing large data structures
+    global_expected_paths.clear()
+    global_expected_inodes.clear()
+    gc.collect()

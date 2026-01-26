@@ -8,15 +8,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def pause_cross_seeded_torrents_for_instance(instance, client):
+def pause_cross_seeded_torrents_for_instance(instance, client, torrents=None):
     """
     Checks for and pauses cross-seeded torrents on a single qBittorrent instance.
     A torrent is considered a duplicate if it has the same name as another torrent
     that is in a paused state.
+    
+    Args:
+        instance: The Instance object
+        client: The qBittorrent client
+        torrents: Optional pre-fetched torrent list (for memory optimization)
     """
     settings = load_settings()
     try:
-        torrents = get_all_torrents(client)
+        # Use pre-fetched torrents if provided, otherwise fetch them
+        if torrents is None:
+            torrents = get_all_torrents(client)
         # Get names of all torrents that are in any paused state.
         paused_torrent_names = {t.name for t in torrents if 'paused' in t.state.lower()}
 

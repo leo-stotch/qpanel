@@ -236,42 +236,33 @@ def group_orphaned_files_by_directory(orphaned_files):
     result = {}
     
     for instance_id, files in files_by_instance.items():
-        # Group files by their parent directories
+        # Group files by their immediate parent directory
         files_by_parent = defaultdict(list)
         for f in files:
-            # Get the parent directory (one level up from the file)
             parent = os.path.dirname(f.file_path)
             files_by_parent[parent].append(f)
         
-        # Find common ancestors for directories that share a parent
-        # We want to find the "release folder" level grouping
-        def find_common_grouping_directory(file_path):
-            """
-            Find the appropriate grouping directory for a file.
-            This looks for common media release folder patterns.
-            """
-            parts = file_path.split('/')
-            # Skip empty parts
-            parts = [p for p in parts if p]
-            
-            # Return the first two levels after root (e.g., /downloads/ReleaseName)
-            # This typically captures the release folder
-            if len(parts) >= 2:
-                return '/' + '/'.join(parts[:2])
-            elif len(parts) == 1:
-                return '/' + parts[0]
-            return '/'
-        
-        # Group by the common release directory
-        files_by_release = defaultdict(list)
-        for f in files:
-            release_dir = find_common_grouping_directory(f.file_path)
-            files_by_release[release_dir].append(f)
+        # Merge child directories into their parent group when both exist.
+        # E.g. if we have groups for /downloads/Movie and /downloads/Movie/Subs,
+        # merge Subs into the Movie group. Sort by depth (shallowest first) so
+        # parents are processed before children.
+        sorted_dirs = sorted(files_by_parent.keys(), key=lambda d: d.count('/'))
+        merged = {}
+        for d in sorted_dirs:
+            merged_into = None
+            for existing_dir in merged:
+                if d.startswith(existing_dir + '/'):
+                    merged_into = existing_dir
+                    break
+            if merged_into:
+                merged[merged_into].extend(files_by_parent[d])
+            else:
+                merged[d] = list(files_by_parent[d])
         
         groups = []
         ungrouped = []
         
-        for directory, dir_files in sorted(files_by_release.items()):
+        for directory, dir_files in sorted(merged.items()):
             if len(dir_files) > 1:
                 # Multiple files in this directory - create a group
                 total_size = sum(f.file_size or 0 for f in dir_files)

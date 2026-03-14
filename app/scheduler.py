@@ -257,6 +257,14 @@ def tag_torrents_with_no_hard_links(instance, client, torrents):
                         inactive_seeding_time_limit=-1  # Use global settings
                     )
                     logger.info(f"Reset share limits for '{torrent.name}' to global settings.")
+
+                    # Remove specified categories if configured
+                    if instance.remove_category_on_nohl_removal and instance.nohl_removal_categories:
+                        categories_to_remove = [c.strip() for c in instance.nohl_removal_categories.split(',') if c.strip()]
+                        current_category = torrent.category.strip() if torrent.category else ''
+                        if current_category in categories_to_remove:
+                            client.torrents_set_category(category='', torrent_hashes=torrent.hash)
+                            logger.info(f"Removed category '{current_category}' from '{torrent.name}' after noHL tag removal.")
                     
                     # Log action
                     log_entry = ActionLog(

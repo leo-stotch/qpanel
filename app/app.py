@@ -65,6 +65,8 @@ class Instance(db.Model):
     qbt_download_dir = db.Column(db.String(500))
     mapped_download_dir = db.Column(db.String(500))
     tag_nohardlinks = db.Column(db.Boolean, default=False)
+    remove_category_on_nohl_removal = db.Column(db.Boolean, default=False)
+    nohl_removal_categories = db.Column(db.Text, default='')
     pause_cross_seeded_torrents = db.Column(db.Boolean, default=False)
     tag_unregistered_torrents = db.Column(db.Boolean, default=False)
     orphaned_scan_enabled = db.Column(db.Boolean, default=False)
@@ -497,6 +499,8 @@ def instances():
             qbt_download_dir=request.form.get('qbt_download_dir'),
             mapped_download_dir=request.form.get('mapped_download_dir'),
             tag_nohardlinks=request.form.get('tag_nohardlinks') == 'true',
+            remove_category_on_nohl_removal=request.form.get('remove_category_on_nohl_removal') == 'true',
+            nohl_removal_categories=request.form.get('nohl_removal_categories', ''),
             pause_cross_seeded_torrents=request.form.get('pause_cross_seeded_torrents') == 'true',
             tag_unregistered_torrents=request.form.get('tag_unregistered_torrents') == 'true'
         )
@@ -541,6 +545,8 @@ def edit_instance(instance_id):
         instance.qbt_download_dir = request.form.get('qbt_download_dir')
         instance.mapped_download_dir = request.form.get('mapped_download_dir')
         instance.tag_nohardlinks = request.form.get('tag_nohardlinks') == 'true'
+        instance.remove_category_on_nohl_removal = request.form.get('remove_category_on_nohl_removal') == 'true'
+        instance.nohl_removal_categories = request.form.get('nohl_removal_categories', '')
         instance.pause_cross_seeded_torrents = request.form.get('pause_cross_seeded_torrents') == 'true'
         instance.tag_unregistered_torrents = request.form.get('tag_unregistered_torrents') == 'true'
         db.session.commit()

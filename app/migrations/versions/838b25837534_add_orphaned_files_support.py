@@ -33,6 +33,8 @@ def upgrade():
             sa.Column('qbt_download_dir', sa.String(length=500), nullable=True),
             sa.Column('mapped_download_dir', sa.String(length=500), nullable=True),
             sa.Column('tag_nohardlinks', sa.Boolean(), nullable=True),
+            sa.Column('remove_category_on_nohl_removal', sa.Boolean(), nullable=True),
+            sa.Column('nohl_removal_categories', sa.Text(), nullable=True),
             sa.Column('pause_cross_seeded_torrents', sa.Boolean(), nullable=True),
             sa.Column('tag_unregistered_torrents', sa.Boolean(), nullable=True),
             sa.Column('orphaned_scan_enabled', sa.Boolean(), nullable=True),

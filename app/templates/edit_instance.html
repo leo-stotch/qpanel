@@ -71,6 +71,20 @@
                             <label class="form-check-label" for="tag_nohardlinks">Tag torrents that don't have hard links</label>
                             <small class="form-text text-muted d-block">If enabled, adds the 'noHL' tag to torrents whose files exist only in the qBittorrent download directory. In order for this to work, you need to set the mappings below.</small>
                         </div>
+                        <div id="nohl_options" style="{% if not instance.tag_nohardlinks %}display: none;{% endif %}">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="remove_category_on_nohl_removal" name="remove_category_on_nohl_removal" value="true" {% if instance.remove_category_on_nohl_removal %}checked{% endif %}>
+                                <label class="form-check-label" for="remove_category_on_nohl_removal">Remove categories when noHL tag is removed</label>
+                                <small class="form-text text-muted d-block">If enabled, the specified categories will be removed from a torrent when the 'noHL' tag is cleared (i.e., when hard links are detected).</small>
+                            </div>
+                            <div id="nohl_categories_field" style="{% if not instance.remove_category_on_nohl_removal %}display: none;{% endif %}">
+                                <div class="form-group mt-2 mb-3">
+                                    <label for="nohl_removal_categories" class="form-label">Categories to remove</label>
+                                    <input type="text" class="form-control" id="nohl_removal_categories" name="nohl_removal_categories" value="{{ instance.nohl_removal_categories or '' }}" placeholder="e.g., movies, tv-shows">
+                                    <small class="form-text text-muted">Comma-separated list of category names to remove from the torrent.</small>
+                                </div>
+                            </div>
+                        </div>
                         <div id="hardlinks_fields" style="{% if not instance.tag_nohardlinks %}display: none;{% endif %}">
                             <hr class="my-3">
                             <div class="form-group mb-3">
@@ -100,23 +114,33 @@
     document.addEventListener('DOMContentLoaded', function() {
         const tagNoHardlinksCheckbox = document.getElementById('tag_nohardlinks');
         const hardlinksFields = document.getElementById('hardlinks_fields');
+        const nohlOptions = document.getElementById('nohl_options');
         const qbtDownloadDirInput = document.getElementById('qbt_download_dir');
         const mappedDownloadDirInput = document.getElementById('mapped_download_dir');
+        const removeCategoryToggle = document.getElementById('remove_category_on_nohl_removal');
+        const nohlCategoriesField = document.getElementById('nohl_categories_field');
 
         function toggleHardlinksFields() {
-            if (tagNoHardlinksCheckbox.checked) {
-                hardlinksFields.style.display = 'block';
+            const enabled = tagNoHardlinksCheckbox.checked;
+            hardlinksFields.style.display = enabled ? 'block' : 'none';
+            nohlOptions.style.display = enabled ? 'block' : 'none';
+            if (enabled) {
                 qbtDownloadDirInput.setAttribute('required', 'required');
                 mappedDownloadDirInput.setAttribute('required', 'required');
             } else {
-                hardlinksFields.style.display = 'none';
                 qbtDownloadDirInput.removeAttribute('required');
                 mappedDownloadDirInput.removeAttribute('required');
             }
         }
 
+        function toggleCategoriesField() {
+            nohlCategoriesField.style.display = removeCategoryToggle.checked ? 'block' : 'none';
+        }
+
         tagNoHardlinksCheckbox.addEventListener('change', toggleHardlinksFields);
+        removeCategoryToggle.addEventListener('change', toggleCategoriesField);
         toggleHardlinksFields(); // Run on page load
+        toggleCategoriesField(); // Run on page load
     });
 </script>
 {% endblock %} 

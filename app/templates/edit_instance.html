@@ -8,8 +8,8 @@
     <form method="post" action="{{ url_for('edit_instance', instance_id=instance.id) }}">
         <div class="row">
             <!-- Connection Details -->
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
+            <div class="col-12 mb-4">
+                <div class="card">
                     <div class="card-header">
                         <h4>Connection Details</h4>
                     </div>
@@ -61,22 +61,8 @@
                             <label class="form-check-label" for="tag_nohardlinks">Tag torrents that don't have hard links</label>
                             <small class="form-text text-muted d-block">If enabled, adds the 'noHL' tag to torrents whose files exist only in the qBittorrent download directory. In order for this to work, you need to set the mappings below.</small>
                         </div>
-                        <div id="nohl_options" style="{% if not instance.tag_nohardlinks %}display: none;{% endif %}">
-                            <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" id="remove_category_on_nohl_removal" name="remove_category_on_nohl_removal" value="true" {% if instance.remove_category_on_nohl_removal %}checked{% endif %}>
-                                <label class="form-check-label" for="remove_category_on_nohl_removal">Remove categories when noHL tag is set</label>
-                                <small class="form-text text-muted d-block">If enabled, the specified categories will be removed from a torrent when the 'noHL' tag is added (i.e., when no hard links are detected).</small>
-                            </div>
-                            <div id="nohl_categories_field" style="{% if not instance.remove_category_on_nohl_removal %}display: none;{% endif %}">
-                                <div class="form-group mt-2 mb-3">
-                                    <label for="nohl_removal_categories" class="form-label">Categories to remove</label>
-                                    <input type="text" class="form-control" id="nohl_removal_categories" name="nohl_removal_categories" value="{{ instance.nohl_removal_categories or '' }}" placeholder="e.g., movies, tv-shows">
-                                    <small class="form-text text-muted">Comma-separated list of category names to remove from the torrent.</small>
-                                </div>
-                            </div>
-                        </div>
                         <div id="hardlinks_fields" style="{% if not instance.tag_nohardlinks %}display: none;{% endif %}">
-                            <div class="row mt-2">
+                            <div class="row mt-2 mb-2">
                                 <div class="col-md-6">
                                     <div class="form-group mb-3">
                                         <label for="qbt_download_dir" class="form-label">qBittorrent Download Directory</label>
@@ -90,6 +76,20 @@
                                         <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" value="{{ instance.mapped_download_dir or '' }}" placeholder="e.g., /data/torrents">
                                         <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="nohl_options" style="{% if not instance.tag_nohardlinks %}display: none;{% endif %}">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="remove_category_on_nohl_removal" name="remove_category_on_nohl_removal" value="true" {% if instance.remove_category_on_nohl_removal %}checked{% endif %}>
+                                <label class="form-check-label" for="remove_category_on_nohl_removal">Remove categories when noHL tag is set</label>
+                                <small class="form-text text-muted d-block">If enabled, the specified categories will be removed from a torrent when the 'noHL' tag is added (i.e., when no hard links are detected).</small>
+                            </div>
+                            <div id="nohl_categories_field" style="{% if not instance.remove_category_on_nohl_removal %}display: none;{% endif %}">
+                                <div class="form-group mt-2 mb-3">
+                                    <label for="nohl_removal_categories" class="form-label">Categories to remove</label>
+                                    <input type="text" class="form-control" id="nohl_removal_categories" name="nohl_removal_categories" value="{{ instance.nohl_removal_categories or '' }}" placeholder="e.g., movies, tv-shows">
+                                    <small class="form-text text-muted">Comma-separated list of category names to remove from the torrent.</small>
                                 </div>
                             </div>
                         </div>

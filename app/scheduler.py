@@ -257,14 +257,6 @@ def tag_torrents_with_no_hard_links(instance, client, torrents):
                         inactive_seeding_time_limit=-1  # Use global settings
                     )
                     logger.info(f"Reset share limits for '{torrent.name}' to global settings.")
-
-                    # Remove specified categories if configured
-                    if instance.remove_category_on_nohl_removal and instance.nohl_removal_categories:
-                        categories_to_remove = [c.strip() for c in instance.nohl_removal_categories.split(',') if c.strip()]
-                        current_category = torrent.category.strip() if torrent.category else ''
-                        if current_category in categories_to_remove:
-                            client.torrents_set_category(category='', torrent_hashes=torrent.hash)
-                            logger.info(f"Removed category '{current_category}' from '{torrent.name}' after noHL tag removal.")
                     
                     # Log action
                     log_entry = ActionLog(
@@ -280,19 +272,14 @@ def tag_torrents_with_no_hard_links(instance, client, torrents):
                         if datetime.now() - completion_time > timedelta(hours=1):
                             client.torrents_add_tags(tags='noHL', torrent_hashes=torrent.hash)
                             logger.info(f"Added 'noHL' tag to '{torrent.name}' as it has no hard links and was completed over an hour ago.")
-                            
-                            # Log action
-                            log_entry = ActionLog(
-                                instance_id=instance.id,
-                                action="Tagged with noHL",
-                                details=f"Torrent '{torrent.name}' has no hard links and was completed over an hour ago."
-                            )
-                            db.session.add(log_entry)
 
-                            # Send notification
-                            settings = load_settings()
-                            message = f"Torrent '{torrent.name}' on '{instance.name}' was tagged with 'noHL' because it has no hard links and was completed over an hour ago."
-                            send_notification(message, settings, parse_mode='HTML')
+                            # Remove specified categories when noHL tag is set
+                            if instance.remove_category_on_nohl_removal and instance.nohl_removal_categories:
+                                categories_to_remove = [c.strip() for c in instance.nohl_removal_categories.split(',') if c.strip()]
+                                current_category = torrent.category.strip() if torrent.category else ''
+                                if current_category in categories_to_remove:
+                                    client.torrents_set_category(category='', torrent_hashes=torrent.hash)
+                                    logger.info(f"Removed category '{current_category}' from '{torrent.name}' after noHL tag was set.")
         
     except Exception as e:
         logger.error(f"Failed to check for no hard links for {instance.name}: {e}")

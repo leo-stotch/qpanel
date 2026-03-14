@@ -48,25 +48,15 @@
                             <label class="form-check-label" for="pause_cross_seeded_torrents">Pause Cross-Seeded Torrents</label>
                             <small class="form-text text-muted d-block">If enabled, the application will pause torrents that have the same name as a torrent that is already paused.</small>
                         </div>
-                        <div class="form-check form-switch">
+                        <div class="form-check form-switch mb-3">
                             <input class="form-check-input" type="checkbox" id="tag_unregistered_torrents" name="tag_unregistered_torrents" value="true" {% if instance.tag_unregistered_torrents %}checked{% endif %}>
                             <label class="form-check-label" for="tag_unregistered_torrents">Tag Unregistered Torrents</label>
                             <small class="form-text text-muted d-block">If enabled, the application will tag torrents with "unregistered" if their tracker status indicates they are no longer registered.</small>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- Path Mappings -->
-        <div class="row">
-            <div class="col-md-6 mb-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h4>Path Mappings</h4>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-check form-switch mb-3">
+                        <hr class="my-3">
+
+                        <div class="form-check form-switch mb-2">
                             <input class="form-check-input" type="checkbox" id="tag_nohardlinks" name="tag_nohardlinks" value="true" {% if instance.tag_nohardlinks %}checked{% endif %}>
                             <label class="form-check-label" for="tag_nohardlinks">Tag torrents that don't have hard links</label>
                             <small class="form-text text-muted d-block">If enabled, adds the 'noHL' tag to torrents whose files exist only in the qBittorrent download directory. In order for this to work, you need to set the mappings below.</small>
@@ -74,8 +64,8 @@
                         <div id="nohl_options" style="{% if not instance.tag_nohardlinks %}display: none;{% endif %}">
                             <div class="form-check form-switch mb-2">
                                 <input class="form-check-input" type="checkbox" id="remove_category_on_nohl_removal" name="remove_category_on_nohl_removal" value="true" {% if instance.remove_category_on_nohl_removal %}checked{% endif %}>
-                                <label class="form-check-label" for="remove_category_on_nohl_removal">Remove categories when noHL tag is removed</label>
-                                <small class="form-text text-muted d-block">If enabled, the specified categories will be removed from a torrent when the 'noHL' tag is cleared (i.e., when hard links are detected).</small>
+                                <label class="form-check-label" for="remove_category_on_nohl_removal">Remove categories when noHL tag is set</label>
+                                <small class="form-text text-muted d-block">If enabled, the specified categories will be removed from a torrent when the 'noHL' tag is added (i.e., when no hard links are detected).</small>
                             </div>
                             <div id="nohl_categories_field" style="{% if not instance.remove_category_on_nohl_removal %}display: none;{% endif %}">
                                 <div class="form-group mt-2 mb-3">
@@ -86,16 +76,21 @@
                             </div>
                         </div>
                         <div id="hardlinks_fields" style="{% if not instance.tag_nohardlinks %}display: none;{% endif %}">
-                            <hr class="my-3">
-                            <div class="form-group mb-3">
-                                <label for="qbt_download_dir" class="form-label">qBittorrent Download Directory</label>
-                                <input type="text" class="form-control" id="qbt_download_dir" name="qbt_download_dir" value="{{ instance.qbt_download_dir or '' }}" placeholder="e.g., /downloads">
-                                <small class="form-text text-muted">The absolute path where qBittorrent saves its downloads.</small>
-                            </div>
-                            <div class="form-group">
-                                <label for="mapped_download_dir" class="form-label">Mapped Download Directory</label>
-                                <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" value="{{ instance.mapped_download_dir or '' }}" placeholder="e.g., /data/torrents">
-                                <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <div class="form-group mb-3">
+                                        <label for="qbt_download_dir" class="form-label">qBittorrent Download Directory</label>
+                                        <input type="text" class="form-control" id="qbt_download_dir" name="qbt_download_dir" value="{{ instance.qbt_download_dir or '' }}" placeholder="e.g., /downloads">
+                                        <small class="form-text text-muted">The absolute path where qBittorrent saves its downloads.</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group mb-3">
+                                        <label for="mapped_download_dir" class="form-label">Mapped Download Directory</label>
+                                        <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" value="{{ instance.mapped_download_dir or '' }}" placeholder="e.g., /data/torrents">
+                                        <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -33,10 +33,35 @@
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Path Mappings -->
+        <!-- Automation Settings -->
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Automation Settings</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="pause_cross_seeded_torrents" name="pause_cross_seeded_torrents" value="true" {% if instance.pause_cross_seeded_torrents %}checked{% endif %}>
+                            <label class="form-check-label" for="pause_cross_seeded_torrents">Pause Cross-Seeded Torrents</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will pause torrents that have the same name as a torrent that is already paused.</small>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="tag_unregistered_torrents" name="tag_unregistered_torrents" value="true" {% if instance.tag_unregistered_torrents %}checked{% endif %}>
+                            <label class="form-check-label" for="tag_unregistered_torrents">Tag Unregistered Torrents</label>
+                            <small class="form-text text-muted d-block">If enabled, the application will tag torrents with "unregistered" if their tracker status indicates they are no longer registered.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Path Mappings -->
+        <div class="row">
             <div class="col-md-6 mb-4">
-                <div class="card h-100">
+                <div class="card">
                     <div class="card-header">
                         <h4>Path Mappings</h4>
                     </div>
@@ -58,29 +83,6 @@
                                 <input type="text" class="form-control" id="mapped_download_dir" name="mapped_download_dir" value="{{ instance.mapped_download_dir or '' }}" placeholder="e.g., /data/torrents">
                                 <small class="form-text text-muted">The same absolute path from the perspective of qPanel.</small>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Automation Settings -->
-        <div class="row">
-            <div class="col-12 mb-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h4>Automation Settings</h4>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" type="checkbox" id="pause_cross_seeded_torrents" name="pause_cross_seeded_torrents" value="true" {% if instance.pause_cross_seeded_torrents %}checked{% endif %}>
-                            <label class="form-check-label" for="pause_cross_seeded_torrents">Pause Cross-Seeded Torrents</label>
-                            <small class="form-text text-muted d-block">If enabled, the application will pause torrents that have the same name as a torrent that is already paused.</small>
-                        </div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="tag_unregistered_torrents" name="tag_unregistered_torrents" value="true" {% if instance.tag_unregistered_torrents %}checked{% endif %}>
-                            <label class="form-check-label" for="tag_unregistered_torrents">Tag Unregistered Torrents</label>
-                            <small class="form-text text-muted d-block">If enabled, the application will tag torrents with "unregistered" if their tracker status indicates they are no longer registered.</small>
                         </div>
                     </div>
                 </div>
